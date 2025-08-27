@@ -73,9 +73,8 @@ class TME(Supplier):
         return list(map(self.get_api_part, filtered_matches, tme_stocks)), len(filtered_matches)
 
     def get_api_part(self, tme_part, tme_stock):
-        to_net_price = 1 if tme_stock["PriceType"] == "NET" else 100 / (100 + tme_stock["VatRate"])
         price_breaks = {
-            price_break["Amount"]: price_break["PriceValue"] * to_net_price
+            price_break["Amount"]: price_break["PriceValue"]
             for price_break in tme_stock.get("PriceList", [])
         }
 
