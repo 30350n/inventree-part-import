@@ -14,7 +14,7 @@ from .config import (CONFIG, SUPPLIERS_CONFIG, get_config, get_config_dir, set_c
                      setup_inventree_api, update_config_file, update_supplier_config)
 from .error_helper import *
 from .inventree_helpers import get_category, get_category_parts
-from .part_importer import ImportResult, PartImporter
+from .part_importer import ImportResult, IPNSetting, PartImporter
 from .suppliers import get_suppliers, setup_supplier_companies
 
 def handle_errors(func):
@@ -44,6 +44,7 @@ SuppliersChoices = click.Choice(_suppliers.keys(), case_sensitive=False)
 AvailableSuppliersChoices = click.Choice(_available_suppliers.keys(), case_sensitive=False)
 
 InteractiveChoices = click.Choice(("default", "false", "true", "twice"), case_sensitive=False)
+IPNChoices = click.Choice(("false", "true", "overwrite"), case_sensitive=False)
 
 @click.command
 @click.pass_context
@@ -54,6 +55,9 @@ InteractiveChoices = click.Choice(("default", "false", "true", "twice"), case_se
     "Enable interactive mode. 'twice' will run once normally, then rerun in interactive "
     "mode for any parts that failed to import correctly."
 ))
+@click.option("-I", "--ipn", type=IPNChoices, default="true",
+    help="Set internal part number according to the ipn_format config variable."
+)
 @click.option("-d", "--dry", is_flag=True, help="Run without modifying InvenTree database.")
 @click.option("-c", "--config-dir", help="Override path to config directory.")
 @click.option("-v", "--verbose", is_flag=True, help="Enable verbose output for debugging.")
@@ -72,6 +76,7 @@ def inventree_part_import(
     only=None,
     interactive="false",
     dry=False,
+    ipn="new",
     config_dir=False,
     verbose=False,
     show_config_dir=False,
@@ -193,7 +198,9 @@ def inventree_part_import(
     # make sure suppliers.yaml exists
     get_suppliers(reload=True)
     setup_supplier_companies(inventree_api)
-    importer = PartImporter(inventree_api, interactive=interactive == "true", verbose=verbose)
+    importer = PartImporter(
+        inventree_api, interactive=interactive == "true", verbose=verbose, ipn=IPNSetting[ipn]
+    )
 
     if update or update_recursive:
         info(f"updating {len(parts)} parts from '{category_path}'", end="\n")

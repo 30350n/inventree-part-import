@@ -115,6 +115,7 @@ VALID_CONFIG_VARS = {
     "datasheets",
     "interactive_category_matches",
     "interactive_parameter_matches",
+    "ipn_format",
     "part_selection_format",
     "auto_detect_columns",
     *DEFAULT_CONFIG_VARS,
