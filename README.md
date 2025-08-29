@@ -211,7 +211,7 @@ Input Voltage:
 
 You can optionally use IPN formats to define a custom IPN name on parts.  If you do not configure
 any foramts, the IPN value is not used.  When formats are defined, which are standard Jinja2
-templates, the foramt result along with the CLI option `--ipn false|true|overwrite`, are used to
+templates, the format result along with the CLI option `--ipn false|true|overwrite`, are used to
 define the IPN value.  You can have a single default format for all imports, or customize the
 format per category in the hierarchy.
 
