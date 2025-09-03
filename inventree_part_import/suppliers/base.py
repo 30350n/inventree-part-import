@@ -109,15 +109,20 @@ class ScrapeSupplier(Supplier):
     extra_headers = {}
     fallback_domains = [None]
 
-    def scrape(self, url) -> Response | None:
+    def scrape(self, url, post_json: dict | None = None) -> Response | None:
         if not hasattr(self, "session"):
             self._setup_session()
 
         for retry in retry_timeouts():
             with retry:
-                result = self.session.get(
-                    url, headers=self.extra_headers, timeout=self.request_timeout
-                )
+                if post_json:
+                    result = self.session.post(
+                        url, headers=self.extra_headers, timeout=self.request_timeout, json=post_json
+                    )
+                else:
+                    result = self.session.get(
+                        url, headers=self.extra_headers, timeout=self.request_timeout
+                    )
                 if result.status_code == 200:
                     return result
 

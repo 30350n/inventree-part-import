@@ -5,7 +5,7 @@ from .base import REMOVE_HTML_TAGS, ApiPart, ScrapeSupplier, SupplierSupportLeve
 
 API_BASE_URL = "https://wmsc.lcsc.com/ftps/wm/"
 CURRENCY_URL     = f"https://wmsc.lcsc.com/wmsc/home/currency?currencyCode={{}}"
-SEARCH_URL       = f"{API_BASE_URL}search/global?keyword={{}}"
+SEARCH_URL       = f"{API_BASE_URL}search/v2/global"
 PRODUCT_INFO_URL = f"{API_BASE_URL}product/detail?productCode={{}}"
 
 class LCSC(ScrapeSupplier):
@@ -25,7 +25,7 @@ class LCSC(ScrapeSupplier):
 
     def search(self, search_term):
         for _ in range(3):
-            search_result = self.scrape(SEARCH_URL.format(search_term))
+            search_result = self.scrape(SEARCH_URL, post_json={"keyword": search_term})
             if search_result and (result := search_result.json().get("result")):
                 break
         else:
