@@ -130,6 +130,16 @@ Be sure to use a [Production App](https://developer.digikey.com/documentation/or
 
 Request a **Search API** key from the [Mouser API Hub](https://www.mouser.com/api-hub/).
 
+#### Future Electronics
+
+Follow the instructions from the [Future Electronics API Solutions](https://www.futureelectronics.com/fr/api-solutions).
+
+**Note:** we do not use Future Electronics's categories thus it is **strongly recomanded** to list it
+after DigiKey or Mouser otherwise due to a quirk the Future Electronics supplier parts error during creation.
+
+Creating a Future Electronics supplier part if the part already exists such as if DigiKey or Mouser is listed
+before Future Electronics in `suppliers.yaml` works correctly.
+
 #### TME
 
 Request an API key at the [Developers Page](https://developers.tme.eu/).
