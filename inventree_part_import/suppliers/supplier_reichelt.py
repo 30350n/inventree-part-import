@@ -1,7 +1,7 @@
 import re
 
 from bs4 import BeautifulSoup
-from error_helper import *
+from error_helper import error, warning
 from requests.compat import quote, urljoin
 
 from ..localization import get_language

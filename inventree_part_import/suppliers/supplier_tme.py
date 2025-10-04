@@ -7,7 +7,7 @@ from timeit import default_timer
 from types import MethodType
 
 import requests
-from error_helper import *
+from error_helper import error
 from requests.compat import quote, urlencode
 from requests.exceptions import HTTPError, JSONDecodeError, Timeout
 

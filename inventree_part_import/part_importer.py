@@ -4,7 +4,7 @@ from multiprocessing.pool import ThreadPool
 from string import Formatter, _string
 
 from cutie import select
-from error_helper import *
+from error_helper import BOLD, BOLD_END, error, hint, info, prompt, prompt_input, success, warning
 from inventree.company import Company, ManufacturerPart, SupplierPart, SupplierPriceBreak
 from inventree.part import Parameter, Part
 from requests.compat import quote

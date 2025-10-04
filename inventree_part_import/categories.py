@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from error_helper import *
+from error_helper import info, success, warning
 from inventree.part import ParameterTemplate, PartCategory, PartCategoryParameterTemplate
 
 from .config import (CATEGORIES_CONFIG, PARAMETERS_CONFIG, get_categories_config,

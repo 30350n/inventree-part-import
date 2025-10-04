@@ -5,7 +5,7 @@ from functools import cache
 from hashlib import sha256
 
 import requests
-from error_helper import *
+from error_helper import info, warning
 from inventree.api import InvenTreeAPI
 from inventree.base import ImageMixin, InventreeObject
 from inventree.company import Company as InventreeCompany

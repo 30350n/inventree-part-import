@@ -2,7 +2,7 @@ import os
 from types import MethodType
 
 from bs4 import BeautifulSoup
-from error_helper import *
+from error_helper import hint, warning
 from mouser.api import MouserPartSearchRequest
 
 from ..retries import retry_timeouts

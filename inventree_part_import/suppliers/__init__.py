@@ -1,5 +1,5 @@
 import importlib
-from error_helper import *
+from error_helper import error, hint
 from inspect import isclass
 from multiprocessing.pool import ThreadPool
 from pathlib import Path
