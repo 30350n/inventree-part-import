@@ -257,7 +257,7 @@ class TMEApi:
         url = f"{self.BASE_URL}{action}.json"
         data_sorted = dict(sorted({**data, "Token": self.token}.items()))
 
-        signature_base = f"POST&{quote(url, '')}&{quote(urlencode(data_sorted), '')}".encode()
+        signature_base = f"POST&{quote(url, '')}&{quote(urlencode(data_sorted, quote_via=quote), '')}".encode()
         signature = b64encode(hmac.new(self.secret.encode(), signature_base, sha1).digest())
         data_sorted["ApiSignature"] = signature
 
