@@ -15,7 +15,15 @@ class DigiKey(Supplier):
     SUPPORT_LEVEL = SupplierSupportLevel.OFFICIAL_API
 
     def setup(
-        self, client_id, client_secret, currency, language, location, interactive_part_matches
+        self,
+        *,
+        client_id,
+        client_secret,
+        currency,
+        language,
+        location,
+        interactive_part_matches,
+        **kwargs,
     ):
         self.limit = interactive_part_matches
 

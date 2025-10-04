@@ -18,7 +18,7 @@ from .base import REMOVE_HTML_TAGS, ApiPart, Supplier, SupplierSupportLevel
 class TME(Supplier):
     SUPPORT_LEVEL = SupplierSupportLevel.OFFICIAL_API
 
-    def setup(self, api_token, api_secret, currency, language, location):
+    def setup(self, *, api_token, api_secret, currency, language, location, **kwargs):
         temp_api = TMEApi(api_token, api_secret)
         tme_languages = temp_api.get_languages().json()["Data"]["LanguageList"]
         tme_countries = {

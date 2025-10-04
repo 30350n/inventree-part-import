@@ -75,16 +75,16 @@ class SupplierSupportLevel(IntEnum):
     SCRAPING = 2
 
 class Supplier:
-    SUPPORT_LEVEL: SupplierSupportLevel = None
+    SUPPORT_LEVEL: SupplierSupportLevel
 
-    def setup(self) -> bool:
-        pass
+    def setup(self, **kwargs) -> bool:
+        return True
 
     def _get_setup_params(self):
         return {
-            name: parameter.default if parameter.default is not _empty else None
+            name: None if parameter.default is _empty else parameter.default
             for name, parameter in inspect.signature(self.setup).parameters.items()
-            if name != "self"
+            if name not in {"self", "kwargs"}
         }
 
     def search(self, search_term: str) -> tuple[list[ApiPart], int]:

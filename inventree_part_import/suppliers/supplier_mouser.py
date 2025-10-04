@@ -21,7 +21,16 @@ class Mouser(ScrapeSupplier):
 
     fallback_domains = ["www2.mouser.com", "eu.mouser.com"]
 
-    def setup(self, api_key, currency, scraping, browser_cookies="", locale_url="www.mouser.com"):
+    def setup(
+        self,
+        *,
+        api_key,
+        currency,
+        scraping,
+        browser_cookies="",
+        locale_url="www.mouser.com",
+        **kwargs,
+    ):
         os.environ["MOUSER_PART_API_KEY"] = api_key
 
         self.currency = currency

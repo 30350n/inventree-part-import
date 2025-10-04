@@ -14,7 +14,16 @@ SEARCH_URL = f"{BASE_URL}index.html?ACTION=446&q={{}}"
 class Reichelt(ScrapeSupplier):
     SUPPORT_LEVEL = SupplierSupportLevel.SCRAPING
 
-    def setup(self, language, location, scraping, interactive_part_matches, browser_cookies=""):
+    def setup(
+        self,
+        *,
+        language,
+        location,
+        scraping,
+        interactive_part_matches,
+        browser_cookies="",
+        **kwargs
+    ):
         if location not in LOCATION_MAP:
             return self.load_error(f"unsupported location '{location}'")
 

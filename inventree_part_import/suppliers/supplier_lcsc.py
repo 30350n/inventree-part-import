@@ -12,7 +12,7 @@ PRODUCT_INFO_URL = f"{API_BASE_URL}product/detail?productCode={{}}"
 class LCSC(ScrapeSupplier):
     SUPPORT_LEVEL = SupplierSupportLevel.INOFFICIAL_API
 
-    def setup(self, currency, browser_cookies="", ignore_duplicates=True):
+    def setup(self, *, currency, browser_cookies="", ignore_duplicates=True, **kwargs):
         if currency not in CURRENCY_MAP.values():
             return self.load_error(f"unsupported currency '{currency}'")
 
