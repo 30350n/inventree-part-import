@@ -322,7 +322,7 @@ class DryInvenTreeAPI(InvenTreeAPI):
     DRY_RUN = True
 
     def __init__(self, host=None, **kwargs):
-        self.base_url = "running in dry mode"
+        self.base_url = "inventree/"
         pass
 
     def get(self, url, **kwargs):
@@ -332,7 +332,7 @@ class DryInvenTreeAPI(InvenTreeAPI):
         return []
 
     def post(self, url, data, **kwargs):
-        return {"pk": 1337133742, "url": "", **data}
+        return {"pk": 1, "url": "", **data}
 
     def testServer(self):
         raise NotImplementedError()
