@@ -271,7 +271,7 @@ class TMEApi:
                     result.raise_for_status()
         except (HTTPError, Timeout) as e:
             try:
-                assert result
+                assert result is not None
                 if (status := result.json()["Status"]) == "E_INPUT_PARAMS_VALIDATION_ERROR":
                     return None
                 error(f"'{action}' action failed with '{status}'", prefix="TME API error: ")

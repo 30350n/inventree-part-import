@@ -167,10 +167,10 @@ class LCSCApi:
                         self.session.get(url) if json is None else self.session.post(url, json=json)
                     )
                     result.raise_for_status()
-            assert result
+            assert result is not None
             return result.json().get("result")
         except (HTTPError, Timeout):
-            assert result
+            assert result is not None
             error(result.json()["msg"], prefix="LCSC API error: ")
         except (JSONDecodeError, KeyError) as e:
             error(str(e), prefix="LCSC API error: ")

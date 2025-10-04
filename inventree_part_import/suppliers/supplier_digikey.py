@@ -156,7 +156,7 @@ class DigiKeyApi:
                         return result
                     result.raise_for_status()
         except (HTTPError, Timeout):
-            assert result
+            assert result is not None
             error(result.json()["detail"], prefix="DigiKey API error: ")
         except (JSONDecodeError, KeyError) as e:
             error(str(e), prefix="DigiKey API error: ")
