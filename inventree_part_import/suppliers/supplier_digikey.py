@@ -1,9 +1,7 @@
-from json import JSONDecodeError
-
 from error_helper import error
 from oauthlib.oauth2 import BackendApplicationClient
-from requests import HTTPError, Timeout
 from requests.compat import quote
+from requests.exceptions import HTTPError, JSONDecodeError, Timeout
 from requests_oauthlib import OAuth2Session
 
 from ..localization import get_country, get_language

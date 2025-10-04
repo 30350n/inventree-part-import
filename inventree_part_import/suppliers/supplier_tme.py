@@ -27,19 +27,18 @@ class TME(Supplier):
 
         if not (lang := get_language(language)):
             return self.load_error(f"invalid language code '{language}'")
-        if not lang["alpha_2"] in tme_languages:
+        if (language := lang["alpha_2"]) not in tme_languages:
             return self.load_error(f"unsupported language '{language}'")
         language = lang["alpha_2"]
 
         if not (country := get_country(location)):
             return self.load_error(f"invalid country code '{location}'")
-        if not country["alpha_2"] in tme_countries:
+        if (location := country["alpha_2"]) not in tme_countries:
             return self.load_error(f"unsupported location '{location}'")
         if currency not in tme_countries[country["alpha_2"]]["CurrencyList"]:
             return self.load_error(
                 f"unsupported currency '{currency}' for location '{location}'"
             )
-        location = country["alpha_2"]
 
         self.tme_api = TMEApi(api_token, api_secret, language, location, currency)
 
@@ -263,6 +262,8 @@ class TMEApi:
         signature = b64encode(hmac.new(self.secret.encode(), signature_base, sha1).digest())
         data_sorted["ApiSignature"] = signature
 
+        result = None
+
         try:
             for retry in retry_timeouts():
                 with retry:
@@ -270,8 +271,8 @@ class TMEApi:
                     result.raise_for_status()
         except (HTTPError, Timeout) as e:
             try:
-                status = result.json()["Status"]
-                if status == "E_INPUT_PARAMS_VALIDATION_ERROR":
+                assert result
+                if (status := result.json()["Status"]) == "E_INPUT_PARAMS_VALIDATION_ERROR":
                     return None
                 error(f"'{action}' action failed with '{status}'", prefix="TME API error: ")
             except (JSONDecodeError, KeyError):
