@@ -72,11 +72,8 @@ class TME(Supplier):
         return list(map(self.get_api_part, filtered_matches, tme_stocks)), len(filtered_matches)
 
     def get_api_part(self, tme_part, tme_stock):
-        to_net_price = 1.0
-        if tme_stock.get("PriceType") == "GROSS":
-            to_net_price = 100 / (100 + tme_stock["VatRate"])
         price_breaks = {
-            price_break["Amount"]: price_break["PriceValue"] * to_net_price
+            price_break["Amount"]: price_break["PriceValue"]
             for price_break in tme_stock.get("PriceList", [])
         }
 
@@ -211,6 +208,13 @@ class TMEApi:
         if result := self._api_call("Products/GetPricesAndStocks", data):
             result_data = result.json()["Data"]
             assert result_data["Currency"] == self.currency
+
+            if result_data["PriceType"] == "GROSS":
+                for product in result_data["ProductList"]:
+                    to_net_price = 100 / (100 + product["VatRate"])
+                    for price_break in product["PriceList"]:
+                        price_break["PriceValue"] *= to_net_price
+
             return result_data["ProductList"]
         return []
 
