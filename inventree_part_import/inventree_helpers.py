@@ -22,9 +22,6 @@ INVENTREE_CACHE.mkdir(parents=True, exist_ok=True)
 
 def get_supplier_part(inventree_api: InvenTreeAPI, company: InventreeCompany, sku):
     supplier_parts = SupplierPart.list(inventree_api, SKU=sku)
-    if len(supplier_parts) == 1:
-        return supplier_parts[0]
-
     company_supplier_parts = [part for part in supplier_parts if part.supplier == company.pk]
     if len(company_supplier_parts) == 1:
         return company_supplier_parts[0]
