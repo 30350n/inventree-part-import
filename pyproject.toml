@@ -18,7 +18,6 @@ dependencies = [
     "browser-cookie3",
     "click",
     "cutie",
-    "digikey-api>=1.0",
     "fake-useragent",
     "inventree>=0.13.2",
     "isocodes",
@@ -26,6 +25,7 @@ dependencies = [
     "platformdirs>=3.2.0",
     "pyyaml",
     "requests",
+    "requests-oauthlib",
     "tablib[ods, xls, xlsx]",
     "thefuzz",
 ]
