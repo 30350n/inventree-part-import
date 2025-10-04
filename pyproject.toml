@@ -3,7 +3,7 @@ name = "inventree-part-import"
 version = "1.8.1"
 description = "CLI to import parts from suppliers like DigiKey, LCSC, Mouser, etc. to InvenTree"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<4.0"
 classifiers = [
     "Environment :: Console",
     "Operating System :: OS Independent",
