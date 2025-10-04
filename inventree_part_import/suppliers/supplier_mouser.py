@@ -2,9 +2,9 @@ import os
 from types import MethodType
 
 from bs4 import BeautifulSoup
+from error_helper import *
 from mouser.api import MouserPartSearchRequest
 
-from ..error_helper import *
 from ..retries import retry_timeouts
 from .base import (
     DOMAIN_REGEX,

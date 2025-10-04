@@ -7,10 +7,10 @@ from timeit import default_timer
 from types import MethodType
 
 import requests
+from error_helper import *
 from requests.compat import quote, urlencode
 from requests.exceptions import HTTPError, JSONDecodeError, Timeout
 
-from ..error_helper import *
 from ..localization import get_country, get_language
 from ..retries import retry_timeouts
 from .base import REMOVE_HTML_TAGS, ApiPart, Supplier, SupplierSupportLevel

@@ -1,10 +1,10 @@
 from json import JSONDecodeError
 
+from error_helper import error
 from oauthlib.oauth2 import BackendApplicationClient
 from requests import HTTPError, Timeout
 from requests_oauthlib import OAuth2Session
 
-from ..error_helper import error
 from ..localization import get_country, get_language
 from ..retries import retry_timeouts
 from .base import ApiPart, Supplier, SupplierSupportLevel

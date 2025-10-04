@@ -5,6 +5,7 @@ from functools import cache
 from hashlib import sha256
 
 import requests
+from error_helper import *
 from inventree.api import InvenTreeAPI
 from inventree.base import ImageMixin, InventreeObject
 from inventree.company import Company as InventreeCompany
@@ -14,7 +15,6 @@ from platformdirs import user_cache_path
 from requests.compat import unquote, urlparse
 from requests.exceptions import ConnectionError, HTTPError, Timeout
 
-from .error_helper import *
 from .retries import retry_timeouts
 
 INVENTREE_CACHE = user_cache_path(__package__, ensure_exists=True) / "inventree"

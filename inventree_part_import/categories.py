@@ -1,10 +1,10 @@
 from dataclasses import dataclass, field
 
+from error_helper import *
 from inventree.part import ParameterTemplate, PartCategory, PartCategoryParameterTemplate
 
 from .config import (CATEGORIES_CONFIG, PARAMETERS_CONFIG, get_categories_config,
                      get_parameters_config, update_config_file)
-from .error_helper import *
 
 def setup_categories_and_parameters(inventree_api):
     dry_run = hasattr(inventree_api, "DRY_RUN")

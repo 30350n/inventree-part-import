@@ -1,9 +1,9 @@
 import re
 
 from bs4 import BeautifulSoup
+from error_helper import *
 from requests.compat import quote, urljoin
 
-from ..error_helper import *
 from ..localization import get_language
 from .base import ApiPart, ScrapeSupplier, SupplierSupportLevel, money2float
 

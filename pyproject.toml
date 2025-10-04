@@ -18,6 +18,7 @@ dependencies = [
     "browser-cookie3",
     "click",
     "cutie",
+    "error-helper",
     "fake-useragent",
     "inventree>=0.13.2",
     "isocodes",

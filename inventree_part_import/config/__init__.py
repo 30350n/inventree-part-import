@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 from cutie import prompt_yes_or_no, secure_input, select, select_multiple
+from error_helper import *
 from platformdirs import user_config_path
 from requests.exceptions import HTTPError, Timeout
 from yaml.error import MarkedYAMLError
@@ -16,7 +17,6 @@ if TYPE_CHECKING:
     from ..suppliers.base import Supplier
 
 from .. import __package__ as parent_package
-from ..error_helper import *
 from ..localization import currencies, get_country, get_language
 from ..retries import RetryInvenTreeAPI
 

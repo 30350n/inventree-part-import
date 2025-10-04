@@ -1,6 +1,7 @@
 import re
 
-from ..error_helper import warning
+from error_helper import warning
+
 from .base import REMOVE_HTML_TAGS, ApiPart, ScrapeSupplier, SupplierSupportLevel
 
 API_BASE_URL = "https://wmsc.lcsc.com/ftps/wm/"

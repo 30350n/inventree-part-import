@@ -8,11 +8,11 @@ from http.cookiejar import CookieJar
 from inspect import _empty
 
 import browser_cookie3
+from error_helper import error, warning
 from fake_useragent import UserAgent
 from requests import Response, Session
 
 from ..config import get_config, get_pre_creation_hooks
-from ..error_helper import error, warning
 from ..retries import retry_timeouts
 
 @dataclass
