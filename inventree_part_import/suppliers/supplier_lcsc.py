@@ -5,9 +5,10 @@ from error_helper import warning
 from .base import REMOVE_HTML_TAGS, ApiPart, ScrapeSupplier, SupplierSupportLevel
 
 API_BASE_URL = "https://wmsc.lcsc.com/ftps/wm/"
-CURRENCY_URL     = f"https://wmsc.lcsc.com/wmsc/home/currency?currencyCode={{}}"
-SEARCH_URL       = f"{API_BASE_URL}search/global?keyword={{}}"
+CURRENCY_URL = "https://wmsc.lcsc.com/wmsc/home/currency?currencyCode={}"
+SEARCH_URL = f"{API_BASE_URL}search/global?keyword={{}}"
 PRODUCT_INFO_URL = f"{API_BASE_URL}product/detail?productCode={{}}"
+
 
 class LCSC(ScrapeSupplier):
     SUPPORT_LEVEL = SupplierSupportLevel.INOFFICIAL_API
@@ -42,19 +43,22 @@ class LCSC(ScrapeSupplier):
             warning("failed to retrieve product data from LCSC (internal API error)")
         elif products := result.get("productSearchResultVO"):
             filtered_matches = [
-                product for product in products["productList"]
+                product
+                for product in products["productList"]
                 if product["productModel"].lower().startswith(search_term.lower())
                 or product["productCode"].lower() == search_term.lower()
             ]
 
             exact_matches = [
-                product for product in filtered_matches
+                product
+                for product in filtered_matches
                 if product["productModel"].lower() == search_term.lower()
                 or product["productCode"].lower() == search_term.lower()
             ]
             if self.ignore_duplicates:
                 exact_filtered = [
-                    product for product in exact_matches
+                    product
+                    for product in exact_matches
                     if product.get("stockNumber")
                     or product.get("productImageUrlBig")
                     or product.get("productImageUrl")
@@ -90,9 +94,9 @@ class LCSC(ScrapeSupplier):
             product_url_id = product_url_id
             supplier_link = url_separator.join((prefix, cleanup_url_id(product_url_id)))
         else:
-            product_url_id = cleanup_url_id("_".join((
-                lcsc_part["catalogName"], lcsc_part["title"], lcsc_part["productCode"]
-            )))
+            product_url_id = cleanup_url_id(
+                "_".join((lcsc_part["catalogName"], lcsc_part["title"], lcsc_part["productCode"]))
+            )
             supplier_link = f"https://www.lcsc.com/product-detail/{product_url_id}.html"
 
         product_arrange = lcsc_part.get("productArrange")
@@ -121,7 +125,7 @@ class LCSC(ScrapeSupplier):
         }
 
         if price_list:
-            currency = CURRENCY_MAP.get(price_list[0].get("currencySymbol"), self.currency)
+            currency = CURRENCY_MAP.get(price_list[0].get("currencySymbol")) or self.currency
         else:
             currency = self.currency
 
@@ -145,15 +149,19 @@ class LCSC(ScrapeSupplier):
     def setup_hook(self):
         self.session.get(CURRENCY_URL.format(self.currency), timeout=self.request_timeout)
 
+
 CLEANUP_URL_ID_REGEX = re.compile(r"[^\w\d\.]")
+
+
 def cleanup_url_id(url):
     url = url.replace(" / ", "_")
     url = CLEANUP_URL_ID_REGEX.sub("_", url)
     return url
 
+
 CURRENCY_MAP = {
-    "$":   "USD",
-    "€":   "EUR",
-    "¥":   "CNY",
+    "$": "USD",
+    "€": "EUR",
+    "¥": "CNY",
     "HK$": "HKD",
 }
