@@ -3,6 +3,7 @@ from json import JSONDecodeError
 from error_helper import error
 from oauthlib.oauth2 import BackendApplicationClient
 from requests import HTTPError, Timeout
+from requests.compat import quote
 from requests_oauthlib import OAuth2Session
 
 from ..localization import get_country, get_language
@@ -111,7 +112,7 @@ class DigiKeyApi:
     BASE_URL = "https://api.digikey.com"
     OAUTH2_TOKEN_URL = f"{BASE_URL}/v1/oauth2/token"
     KEYWORD_SEARCH_URL = f"{BASE_URL}/products/v4/search/keyword"
-    PRODUCT_DETAILS_URL = f"{BASE_URL}/products/v4/search/{{productNumber}}/productdetails"
+    PRODUCT_DETAILS_URL = f"{BASE_URL}/products/v4/search/{{}}/productdetails"
 
     def __init__(self, client_id, client_secret, currency, language, location):
         oauth_client = BackendApplicationClient(client_id)
@@ -132,7 +133,8 @@ class DigiKeyApi:
             return result.json()
 
     def product_details(self, product_number):
-        if result := self._api_call(self.PRODUCT_DETAILS_URL.format(productNumber=product_number)):
+        url = self.PRODUCT_DETAILS_URL.format(quote(product_number, safe=""))
+        if result := self._api_call(url):
             return result.json()
 
     def _api_call(self, url, json=None):
