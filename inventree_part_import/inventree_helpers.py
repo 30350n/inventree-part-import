@@ -48,6 +48,7 @@ def get_part(inventree_api: InvenTreeAPI, name):
 
 def get_category(inventree_api: InvenTreeAPI, category_path):
     name = category_path.split("/")[-1]
+    category_path = re.sub(r"\s*\/\s*", "/", category_path)
     for category in PartCategory.list(inventree_api, search=name):
         if category.pathstring == category_path:
             return category
@@ -159,6 +160,14 @@ def upload_datasheet(part: Part, datasheet_url: str):
         part.uploadAttachment(str(datasheet_path), "datasheet")
     except HTTPError as e:
         warning(f"failed to upload datasheet with: {e.args[0]['body']}")
+
+def set_barcode(part: Part, barcode: str | None):
+    if part.barcode_hash or not barcode:
+        return
+    try:
+        part.assignBarcode(barcode)
+    except HTTPError as e:
+        warning(f"failed to assign barcode with: {e.args[0]['body']}")
 
 def url2filename(url):
     parsed = urlparse(url)

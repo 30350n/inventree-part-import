@@ -120,10 +120,10 @@ def inventree_part_import(
     if configure:
         _, available_suppliers = get_suppliers(reload=True)
         supplier = available_suppliers[configure]
-        with update_config_file(SUPPLIERS_CONFIG) as suppliers_config:
+        with update_config_file(SUPPLIERS_CONFIG, allow_empty=True) as suppliers_config:
             supplier_config = config if (config := suppliers_config.get(configure)) else {}
             new_config = update_supplier_config(supplier, supplier_config, force_update=True)
-            if new_config:
+            if new_config is not None:
                 suppliers_config[configure] = new_config
         return
 
