@@ -121,10 +121,9 @@ These can be set via the CLI like so: `inventree-part-import --configure <suppli
 
 #### DigiKey
 
-For getting a DigiKey API key, follow the instructions
-[here](https://github.com/peeter123/digikey-api#register).
-Be sure to use a [Production App](https://developer.digikey.com/documentation/organization),
-**not the Sandbox API!**
+Register a [**Production App**](https://developer.digikey.com/documentation?atab=tab_link_3) on the [Digikey API portal](https://developer.digikey.com) and enable the "ProductInformation V4" API for it.
+
+**Using a Sandbox app will not work.**
 
 #### Mouser
 
