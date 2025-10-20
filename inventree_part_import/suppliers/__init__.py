@@ -43,7 +43,7 @@ def setup_supplier_companies(inventree_api):
     global _SUPPLIER_COMPANIES
     _SUPPLIER_COMPANIES = {}
     global_config = get_config()
-    with update_config_file(SUPPLIERS_CONFIG) as suppliers_config:
+    with update_config_file(SUPPLIERS_CONFIG, allow_empty=True) as suppliers_config:
         for id, supplier_object in _SUPPLIER_OBJECTS.items():
             supplier_config = suppliers_config.get(id)
             if supplier_config is None:

@@ -248,7 +248,7 @@ def setup_default_configuration_files(inventree_api):
                 parameters_config.touch()
 
 @contextmanager
-def update_config_file(file_name):
+def update_config_file(file_name, allow_empty=False):
     config_path = _CONFIG_DIR / file_name
     config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     try:
@@ -256,7 +256,7 @@ def update_config_file(file_name):
     finally:
         backup_path = config_path.with_suffix(config_path.suffix + "_bak")
         shutil.copy(config_path, backup_path)
-        yaml_data = yaml_dump(config, sort_keys=False)
+        yaml_data = yaml_dump(config, sort_keys=False, allow_empty=allow_empty)
         config_path.write_text(yaml_data, encoding="utf-8")
         backup_path.unlink()
 
@@ -266,7 +266,7 @@ def load_suppliers_config(suppliers: dict[str, Supplier], setup=True):
     if suppliers_config.is_file():
         suppliers_out = {}
         try:
-            with update_config_file(SUPPLIERS_CONFIG) as suppliers_config_data:
+            with update_config_file(SUPPLIERS_CONFIG, allow_empty=True) as suppliers_config_data:
                 previous_supplier = None
                 for id, supplier_config in suppliers_config_data.items():
                     if supplier_config is None:
@@ -411,9 +411,10 @@ def new_configuration_hint():
         hint("this is normal if you're using this program for the first time")
         _NEW_CONFIGURATION_HINT = False
 
-def yaml_dump(data, sort_keys=True):
+def yaml_dump(data, sort_keys=True, allow_empty=False):
     yaml_data = yaml.safe_dump(data, indent=4, sort_keys=sort_keys, allow_unicode=True)
-    yaml_data = YAML_REMOVE_NULL_REGEX.sub("", yaml_data)
+    if not allow_empty:
+        yaml_data = YAML_REMOVE_NULL_REGEX.sub("", yaml_data)
     yaml_data = YAML_FIX_LIST_INDENTATION_REGEX.sub(YAML_FIX_LIST_INDENTATION_SUB, yaml_data)
     return yaml_data
 
