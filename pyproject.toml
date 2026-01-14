@@ -1,6 +1,6 @@
 [project]
 name = "inventree-part-import"
-version = "1.9.0"
+version = "1.9.1"
 description = "CLI to import parts from suppliers like DigiKey, LCSC, Mouser, etc. to InvenTree"
 readme = "README.md"
 requires-python = ">=3.10,<4.0"
@@ -21,7 +21,7 @@ dependencies = [
     "cutie",
     "error-helper",
     "fake-useragent",
-    "inventree>=0.13.2",
+    "inventree>=0.13.2,<0.20.0",
     "isocodes",
     "mouser>=0.1.5",
     "platformdirs>=3.2.0",
