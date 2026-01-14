@@ -51,7 +51,8 @@ exclude = [
     ".pre-commit-config.yaml",
     "tests/",
     "tasks.py",
-    "shell.nix",
+    "flake.nix",
+    "flake.lock",
 ]
 
 [project.optional-dependencies]
