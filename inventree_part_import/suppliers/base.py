@@ -32,9 +32,13 @@ class ApiPart:
     price_breaks: dict[int, float]
     currency: str
 
+    def __post_init__(self):
+        self._fix_urls()
+
     def finalize(self):
         if not self.finalize_hook():
             return False
+        self._fix_urls()
         for pre_creation_hook in get_pre_creation_hooks():
             pre_creation_hook(self)
         return True
@@ -68,6 +72,14 @@ class ApiPart:
         if self.quantity_available:
             data["available"] = min(float(self.quantity_available), 9999999.0)
         return data
+
+    def _fix_urls(self):
+        if self.image_url and self.image_url.startswith("//"):
+            self.image_url = f"https:{self.image_url}"
+        if self.datasheet_url and self.datasheet_url.startswith("//"):
+            self.datasheet_url = f"https:{self.datasheet_url}"
+        if self.manufacturer_link and self.manufacturer_link.startswith("//"):
+            self.manufacturer_link = f"https:{self.manufacturer_link}"
 
 class SupplierSupportLevel(IntEnum):
     OFFICIAL_API = 0

@@ -119,9 +119,6 @@ class TME(Supplier):
         return True
 
 def fix_tme_url(url):
-    if url and url.startswith("//"):
-        url = f"https:{url}"
-
     # fix supplier part url if language is set to czech (#15)
     if url and "tme.eu/cs/" in url:
         url = url.replace("tme.eu/cs/", "tme.eu/cz/", 1)
