@@ -6,6 +6,7 @@ from hashlib import sha256
 
 import requests
 from error_helper import info, warning
+from fake_useragent import UserAgent
 from inventree.api import InvenTreeAPI
 from inventree.base import ImageMixin, InventreeObject
 from inventree.company import Company as InventreeCompany
@@ -166,8 +167,6 @@ def url2filename(url):
         parsed = urlparse(url.replace("https://", "scheme://"))
     return unquote(parsed.path.split("/")[-1])
 
-DOWNLOAD_HEADERS = {"User-Agent": "Mozilla/5.0"}
-
 from ssl import PROTOCOL_TLSv1_2
 
 class TLSv1_2HTTPAdapter(requests.adapters.HTTPAdapter):
@@ -183,11 +182,15 @@ class TLSv1_2HTTPAdapter(requests.adapters.HTTPAdapter):
 def _download_file_content(url):
     session = requests.Session()
     session.mount("https://", TLSv1_2HTTPAdapter())
+    session.headers.update({
+        "User-Agent": UserAgent(os=["iOS"]).random,
+        "Accept-Language": "en-US,en",
+    })
 
     try:
         for retry in retry_timeouts():
             with retry:
-                result = session.get(url, headers=DOWNLOAD_HEADERS)
+                result = session.get(url)
                 result.raise_for_status()
     except (ConnectionError, HTTPError, Timeout) as e:
         warning(f"failed to download file with '{e}'")
