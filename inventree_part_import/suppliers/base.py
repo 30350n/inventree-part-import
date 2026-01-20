@@ -78,6 +78,8 @@ class ApiPart:
             self.image_url = f"https:{self.image_url}"
         if self.datasheet_url and self.datasheet_url.startswith("//"):
             self.datasheet_url = f"https:{self.datasheet_url}"
+        if self.supplier_link and self.supplier_link.startswith("//"):
+            self.supplier_link = f"https:{self.supplier_link}"
         if self.manufacturer_link and self.manufacturer_link.startswith("//"):
             self.manufacturer_link = f"https:{self.manufacturer_link}"
 
