@@ -7,6 +7,7 @@ from cutie import select
 from error_helper import BOLD, BOLD_END, error, hint, info, prompt, prompt_input, success, warning
 from inventree.company import Company, ManufacturerPart, SupplierPart, SupplierPriceBreak
 from inventree.part import Parameter, Part
+from jinja2 import Template
 from requests.compat import quote
 from requests.exceptions import HTTPError
 from thefuzz import fuzz
@@ -28,12 +29,15 @@ class ImportResult(Enum):
     def __or__(self, other):
         return self if self.value < other.value else other
 
+IPNSetting = Enum('IPNSetting', ["false", "true", "overwrite"])
+
 class PartImporter:
-    def __init__(self, inventree_api, interactive=False, verbose=False):
+    def __init__(self, inventree_api, interactive=False, verbose=False, ipn=IPNSetting.true):
         self.api = inventree_api
         self.interactive = interactive
         self.verbose = verbose
         self.dry_run = hasattr(inventree_api, "DRY_RUN")
+        self.ipn = ipn
 
         # preload pre_creation_hooks
         get_pre_creation_hooks()
@@ -58,6 +62,7 @@ class PartImporter:
         import_result = ImportResult.SUCCESS
 
         self.existing_manufacturer_part = None
+        self.existing_part = None
         search_results = search(search_term, supplier_id, only_supplier)
         for supplier, async_results in search_results:
             info(f"searching at {supplier.name} ...")
@@ -106,6 +111,9 @@ class PartImporter:
                     other_results.wait()
                 return ImportResult.ERROR
 
+            if not self.import_part_ipn(api_part, supplier):
+                import_result |= ImportResult
+
         if not self.existing_manufacturer_part:
             import_result |= ImportResult.FAILURE
 
@@ -141,6 +149,73 @@ class PartImporter:
 
         index = select(choices, deselected_prefix="  ", selected_prefix="> ")
         return [*api_parts, None][index]
+
+    def import_part_ipn(self, api_part, supplier):
+        # only add IPN if --ipn overwrite, or --ipn true and part doesn't yet have an IPN
+        if self.ipn == IPNSetting.false:
+            return True
+        if self.ipn == IPNSetting.true and getattr(self.existing_part, "IPN", None):
+            return True
+
+        # find the outer most mapped category (the leaf category)
+        category = None
+        for subcategory in reversed(api_part.category_path):
+            mapped_subcategory = self.category_map.get(subcategory.lower())
+            if mapped_subcategory:
+                category = mapped_subcategory
+                break
+        else:
+            return True
+
+        # locate the closest template in category hierarchy
+        ipn_format = None
+        for subcategory in reversed(category.path):
+            if mapped_subcategory := self.category_map.get(subcategory.lower()):
+                ipn_format = mapped_subcategory.ipn_format
+                break
+        else:
+            return True
+
+        # skip IPN formatting if no format is defined
+        if ipn_format == None:
+            return True
+
+        # set up jinja2 context
+        context = {
+            "part_id": self.existing_part.pk,
+            "supplier": supplier.name,
+            "category": category.name if category else "",
+            "parameters": api_part.parameters,
+            **{
+                attr: getattr(api_part, attr)
+                for attr in dir(api_part)
+                if not attr.startswith('_') and not callable(getattr(api_part, attr))
+            },
+        }
+
+        # render the IPN format
+        try:
+            template = Template(ipn_format)
+            ipn = template.render(context)
+        except Exception as e:
+            error(f"failed to render IPN format '{ipn_format}' with: {e}")
+            return False
+
+        # if we got a resulting ipn, other than just separators, update the part
+        ipn = ipn.strip(" -_")
+        if ipn:
+            # remove any duplicate separators
+            ipn = re.sub(r'\s+', ' ', ipn)
+            ipn = re.sub(r'-+', '-', ipn)
+            ipn = re.sub(r'_+', '_', ipn)
+
+            if not self.dry_run:
+                update_object_data(self.existing_part, {"IPN": ipn})
+
+            if self.verbose or self.dry_run:
+                info(f"set part IPN to '{ipn}' using template '{ipn_format}'")
+
+        return True
 
     def import_supplier_part(self, supplier: Company, api_part: ApiPart, part: Part = None):
         import_result = ImportResult.SUCCESS
@@ -200,6 +275,7 @@ class PartImporter:
             import_result |= result
 
         self.existing_manufacturer_part = manufacturer_part
+        self.existing_part = part
 
         supplier_part_data = {
             "part": 0 if self.dry_run else part.pk,

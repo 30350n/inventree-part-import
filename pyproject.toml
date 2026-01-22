@@ -23,6 +23,7 @@ dependencies = [
     "fake-useragent",
     "inventree>=0.13.2,<0.20.0",
     "isocodes",
+    "jinja2",
     "mouser>=0.1.5",
     "platformdirs>=3.2.0",
     "pyyaml",
