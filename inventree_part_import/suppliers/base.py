@@ -31,6 +31,7 @@ class ApiPart:
     parameters: dict[str, str]
     price_breaks: dict[int, float]
     currency: str
+    barcode: str | None = None
 
     def __post_init__(self):
         self._fix_urls()

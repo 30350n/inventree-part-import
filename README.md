@@ -5,7 +5,7 @@
 # InvenTree Part Import
 
 This project offers a command line interface to easily import parts from suppliers like
-DigiKey, LCSC, Mouser, etc. into your InvenTree instance.
+DigiKey, LCSC, Mouser, BoltDepot, etc. into your InvenTree instance.
 
 ## Installation
 
@@ -35,7 +35,8 @@ When configuring suppliers, it's **highly recommended** to always enable the Dig
 
 ```console
 select the suppliers you want to setup: (SPACEBAR to toggle, ENTER to confirm)
-> [x] DigiKey
+> [x] BoltDepot
+  [ ] DigiKey
   [ ] LCSC
   [ ] Mouser
   [ ] Reichelt
@@ -116,7 +117,7 @@ The following parameters are always available:
 - `language`: overrides the language for searching this supplier (see [`config.yaml`](#configyaml))
 - `location`: overrides the location for searching this supplier (see [`config.yaml`](#configyaml))
 
-Additionally suppliers can have extra parameters for authentifcation to their respective APIs.
+Additionally suppliers can have extra parameters for authentification to their respective APIs.
 These can be set via the CLI like so: `inventree-part-import --configure <supplier>`.
 
 #### DigiKey
