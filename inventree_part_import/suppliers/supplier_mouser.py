@@ -1,11 +1,11 @@
-import os
 from types import MethodType
 
+import requests
 from bs4 import BeautifulSoup
 from error_helper import hint, warning
-from mouser.api import MouserPartSearchRequest
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
-from ..retries import retry_timeouts
 from .base import (
     DOMAIN_REGEX,
     DOMAIN_SUB,
@@ -15,6 +15,8 @@ from .base import (
     SupplierSupportLevel,
     money2float,
 )
+
+MOUSER_SEARCH_URL = "https://api.mouser.com/api/v1/search/partnumber"
 
 class Mouser(ScrapeSupplier):
     SUPPORT_LEVEL = SupplierSupportLevel.SCRAPING
@@ -31,7 +33,8 @@ class Mouser(ScrapeSupplier):
         locale_url="www.mouser.com",
         **kwargs,
     ):
-        os.environ["MOUSER_PART_API_KEY"] = api_key
+        self.api_key = api_key
+        self._api_session = self._create_api_session()
 
         self.currency = currency
         self.use_scraping = scraping
@@ -42,15 +45,43 @@ class Mouser(ScrapeSupplier):
 
         return True
 
-    def search(self, search_term):
-        search_request = MouserPartSearchRequest("partnumber")
-        for retry in retry_timeouts():
-            with retry:
-                search_request.part_search(search_term)
+    @staticmethod
+    def _create_api_session() -> requests.Session:
+        session = requests.Session()
+        retry = Retry(
+            total=3,
+            backoff_factor=1.0,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["POST", "GET"],
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+        session.headers.update({"Content-Type": "application/json", "Accept": "application/json"})
+        return session
 
-        response = search_request.get_response()
-        if not isinstance(response, dict):
+    def search(self, search_term):
+        url = f"{MOUSER_SEARCH_URL}?apiKey={self.api_key}"
+        payload = {
+            "SearchByPartRequest": {
+                "mouserPartNumber": search_term,
+                "partSearchOptions": "None",
+            }
+        }
+
+        try:
+            resp = self._api_session.post(url, json=payload, timeout=15)
+            resp.raise_for_status()
+            response = resp.json()
+        except Exception as exc:
+            warning(f"Mouser API request failed: {exc}")
             return [], 0
+
+        errors = response.get("Errors") or []
+        if errors:
+            warning(f"Mouser API error: {errors[0].get('Message', 'Unknown API error')}")
+            return [], 0
+
         if not ((results := response.get("SearchResults")) and (parts := results.get("Parts"))):
             return [], 0
 
@@ -79,8 +110,8 @@ class Mouser(ScrapeSupplier):
         supplier_link = DOMAIN_REGEX.sub(
             DOMAIN_SUB.format(self.locale_url), mouser_part.get("ProductDetailUrl"))
 
-        category = mouser_part.get("Category")
-        incomplete_category_path = [category] if category else []
+        category = mouser_part.get("Category", "")
+        incomplete_category_path = [c.strip() for c in category.split("/")] if category else []
 
         parameters = {}
         for attribute in mouser_part.get("ProductAttributes", []):

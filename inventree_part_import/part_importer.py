@@ -5,8 +5,9 @@ from string import Formatter, _string
 
 from cutie import select
 from error_helper import BOLD, BOLD_END, error, hint, info, prompt, prompt_input, success, warning
+from inventree.base import Parameter
 from inventree.company import Company, ManufacturerPart, SupplierPart, SupplierPriceBreak
-from inventree.part import Parameter, Part
+from inventree.part import Part
 from requests.compat import quote
 from requests.exceptions import HTTPError
 from thefuzz import fuzz
@@ -236,18 +237,27 @@ class PartImporter:
             else:
                 path_str = f" {BOLD}/{BOLD_END} ".join(api_part.category_path)
                 if not self.interactive:
-                    error(f"failed to match category for '{path_str}'")
-                    return ImportResult.FAILURE
+                    default_category_name = get_config().get("default_category")
+                    if default_category_name and (
+                        category := self.category_map.get(default_category_name.lower())
+                    ):
+                        warning(
+                            f"failed to match category for '{path_str}', "
+                            f"using default '{category.name}'"
+                        )
+                    else:
+                        error(f"failed to match category for '{path_str}'")
+                        return ImportResult.FAILURE
+                else:
+                    prompt(f"failed to match category for '{path_str}', select category")
+                    if not (category := self.select_category(api_part.category_path)):
+                        return ImportResult.FAILURE
 
-                prompt(f"failed to match category for '{path_str}', select category")
-                if not (category := self.select_category(api_part.category_path)):
-                    return ImportResult.FAILURE
-
-                category.add_alias(api_part.category_path[-1])
-                self.category_map[api_part.category_path[-1].lower()] = category
+                    category.add_alias(api_part.category_path[-1])
+                    self.category_map[api_part.category_path[-1].lower()] = category
 
             info(f"creating part {api_part.MPN} in '{category.part_category.pathstring}' ...")
-            part = Part.create(self.api, {"category": category.part_category.pk, **part_data})
+            part = Part.create(self.api, {"category": category.part_category.pk, **part_data, "copy_category_parameters": False})
 
         manufacturer = create_manufacturer(self.api, api_part.manufacturer)
         info(f"creating manufacturer part {api_part.MPN} ...")
@@ -328,7 +338,7 @@ class PartImporter:
 
         existing_parameters = {
             parameter.template_detail["name"]: parameter
-            for parameter in Parameter.list(self.api, part=part.pk)
+            for parameter in Parameter.list(self.api, model_type="part", model_id=part.pk)
         }
 
         matched_parameters = {}
@@ -447,7 +457,8 @@ class PartImporter:
 def create_parameter(inventree_api, part, parameter_template, value):
     try:
         Parameter.create(inventree_api, {
-            "part": part.pk,
+            "model_type": "part",
+            "model_id": part.pk,
             "template": parameter_template.pk,
             "data": value,
         })
