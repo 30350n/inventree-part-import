@@ -11,7 +11,8 @@ from inventree.api import InvenTreeAPI
 from inventree.base import ImageMixin, InventreeObject
 from inventree.company import Company as InventreeCompany
 from inventree.company import ManufacturerPart, SupplierPart
-from inventree.part import ParameterTemplate, Part, PartCategory
+from inventree.base import ParameterTemplate
+from inventree.part import Part, PartCategory
 from platformdirs import user_cache_path
 from requests.compat import unquote, urlparse
 from requests.exceptions import ConnectionError, HTTPError, Timeout

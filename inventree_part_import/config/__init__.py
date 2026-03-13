@@ -113,6 +113,7 @@ VALID_CONFIG_VARS = {
     "location",
     "scraping",
     "datasheets",
+    "default_category",
     "interactive_category_matches",
     "interactive_parameter_matches",
     "part_selection_format",
