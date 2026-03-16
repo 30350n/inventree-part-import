@@ -8,10 +8,10 @@ import requests
 from error_helper import info, warning
 from fake_useragent import UserAgent
 from inventree.api import InvenTreeAPI
-from inventree.base import ImageMixin, InventreeObject
+from inventree.base import ImageMixin, InventreeObject, ParameterTemplate
 from inventree.company import Company as InventreeCompany
 from inventree.company import ManufacturerPart, SupplierPart
-from inventree.part import ParameterTemplate, Part, PartCategory
+from inventree.part import Part, PartCategory
 from platformdirs import user_cache_path
 from requests.compat import unquote, urlparse
 from requests.exceptions import ConnectionError, HTTPError, Timeout
