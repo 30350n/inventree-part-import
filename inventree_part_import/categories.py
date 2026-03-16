@@ -1,7 +1,8 @@
 from dataclasses import dataclass, field
 
 from error_helper import info, success, warning
-from inventree.part import ParameterTemplate, PartCategory, PartCategoryParameterTemplate
+from inventree.base import ParameterTemplate
+from inventree.part import PartCategory, PartCategoryParameterTemplate
 
 from .config import (CATEGORIES_CONFIG, PARAMETERS_CONFIG, get_categories_config,
                      get_parameters_config, update_config_file)
@@ -104,7 +105,7 @@ def setup_categories_and_parameters(inventree_api):
         category.part_category.pk: category for category in categories.values()
     }
     part_category_parameter_templates = {
-        (category, template.parameter_template_detail["name"])
+        (category, template.template_detail["name"])
         for template in PartCategoryParameterTemplate.list(inventree_api)
         if (category := part_category_pk_to_category.get(template.category))
     }
@@ -116,7 +117,7 @@ def setup_categories_and_parameters(inventree_api):
             info(f"creating parameter template '{parameter}' for '{category_str}' ...")
             PartCategoryParameterTemplate.create(inventree_api, {
                 "category": category.part_category.pk,
-                "parameter_template": parameter_templates[parameter].pk,
+                "template": parameter_templates[parameter].pk,
             })
 
     for category, template_name in part_category_parameter_templates:
@@ -217,8 +218,9 @@ def parse_category_recursive(categories_dict, parent_parameters=tuple(), path=tu
                 warning(f"ignoring unknown special attribute '{child}' in category '{name}'")
 
         omitted_parameters = values.get("_omit_parameters", [])
-        parameters = tuple(set(parent_parameters) - set(omitted_parameters))
-        parameters += tuple(values.get("_parameters", []))
+        # parameters = tuple(set(parent_parameters) - set(omitted_parameters))
+        # parameters += tuple(values.get("_parameters", []))
+        parameters = tuple(values.get("_parameters", []))
         for parameter in set(omitted_parameters) - set(parent_parameters):
             warning(f"failed to omit parameter '{parameter}' in category '{name}'")
 
@@ -230,10 +232,10 @@ def parse_category_recursive(categories_dict, parent_parameters=tuple(), path=tu
             ignore=values.get("_ignore", False),
             structural=values.get("_structural", False),
             aliases=values.get("_aliases", []),
-            parameters=parameters,
+            parameters=list(parameters),
         )
 
-        categories.update(parse_category_recursive(values, parameters, new_path))
+        categories.update(parse_category_recursive(values, tuple(), new_path))
 
     return categories
 
@@ -304,12 +306,12 @@ def setup_config_from_inventree(inventree_api):
 
     parameters = {}
     for template in PartCategoryParameterTemplate.list(inventree_api):
-        parameter_name = template.parameter_template_detail["name"]
+        parameter_name = template.template_detail["name"]
         if parameter_name not in parameters:
             fields = {}
-            if units := template.parameter_template_detail["units"]:
+            if units := template.template_detail["units"]:
                 fields["_unit"] = units
-            if (desc := template.parameter_template_detail["description"]) != parameter_name:
+            if (desc := template.template_detail["description"]) != parameter_name:
                 fields["_description"] = desc
             parameters[parameter_name] = fields
 
