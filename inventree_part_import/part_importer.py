@@ -5,8 +5,9 @@ from string import Formatter, _string
 
 from cutie import select
 from error_helper import BOLD, BOLD_END, error, hint, info, prompt, prompt_input, success, warning
+from inventree.base import Parameter
 from inventree.company import Company, ManufacturerPart, SupplierPart, SupplierPriceBreak
-from inventree.part import Parameter, Part
+from inventree.part import Part
 from requests.compat import quote
 from requests.exceptions import HTTPError
 from thefuzz import fuzz
