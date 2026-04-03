@@ -6,7 +6,8 @@ from string import Formatter, _string
 from cutie import select
 from error_helper import BOLD, BOLD_END, error, hint, info, prompt, prompt_input, success, warning
 from inventree.company import Company, ManufacturerPart, SupplierPart, SupplierPriceBreak
-from inventree.part import Parameter, Part
+from inventree.base import Parameter
+from inventree.part import Part
 from requests.compat import quote
 from requests.exceptions import HTTPError
 from thefuzz import fuzz
@@ -328,7 +329,7 @@ class PartImporter:
 
         existing_parameters = {
             parameter.template_detail["name"]: parameter
-            for parameter in Parameter.list(self.api, part=part.pk)
+            for parameter in Parameter.list(self.api, model_type='part', model_id=part.pk)
         }
 
         matched_parameters = {}
@@ -447,7 +448,8 @@ class PartImporter:
 def create_parameter(inventree_api, part, parameter_template, value):
     try:
         Parameter.create(inventree_api, {
-            "part": part.pk,
+            "model_type": "part",
+            "model_id": part.pk,
             "template": parameter_template.pk,
             "data": value,
         })

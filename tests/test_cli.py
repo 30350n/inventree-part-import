@@ -4,7 +4,8 @@ from pathlib import Path
 import yaml
 from click.testing import CliRunner
 from inventree.api import InvenTreeAPI
-from inventree.part import ParameterTemplate, PartCategory
+from inventree.base import ParameterTemplate
+from inventree.part import PartCategory
 
 from inventree_part_import.categories import setup_config_from_inventree
 from inventree_part_import.cli import inventree_part_import
