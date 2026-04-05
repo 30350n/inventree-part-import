@@ -4,8 +4,6 @@
 __pycache__
 .venv/
 
-.envrc
-
 Pipfile
 Pipfile.lock
 
