@@ -159,6 +159,7 @@ Additionally you can define the following meta attributes (starting with `_`):
   **note: parameters get inherited by sub categories**
 - `_omit_parameters` has to be a list of parameters names defined in parent categories that
   get omitted from the category
+  **note: this is disfunctional in InvenTree >= 1.2.0 as parameter inheritance happens directly in InvenTree**
 - `_structural` can be set to `true` to make the category structural
 
 Here's an example for a config with special attributes:
