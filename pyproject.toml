@@ -21,7 +21,7 @@ dependencies = [
     "cutie",
     "error-helper",
     "fake-useragent",
-    "inventree>=0.23.1",
+    "inventree>=0.20",
     "isocodes",
     "mouser>=0.1.5",
     "platformdirs>=3.2.0",

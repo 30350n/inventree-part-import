@@ -14,7 +14,7 @@ def setup_categories_and_parameters(inventree_api):
     parameters_config = get_parameters_config(inventree_api)
 
     info("setting up categories ...")
-    categories = parse_category_recursive(categories_config)
+    categories = parse_category_recursive(inventree_api, categories_config)
     parameters = parse_parameters(parameters_config)
 
     used_parameters = set.union(set(), *(set(c.parameters) for c in categories.values()))
@@ -198,7 +198,7 @@ class Category:
 CATEGORY_ATTRIBUTES = {
     "_parameters", "_omit_parameters", "_description", "_ignore", "_structural", "_aliases"
 }
-def parse_category_recursive(categories_dict, parent_parameters=tuple(), path=tuple()):
+def parse_category_recursive(inventree_api, categories_dict, parent=None):
     if not categories_dict:
         return {}
 
@@ -218,24 +218,31 @@ def parse_category_recursive(categories_dict, parent_parameters=tuple(), path=tu
                 warning(f"ignoring unknown special attribute '{child}' in category '{name}'")
 
         omitted_parameters = values.get("_omit_parameters", [])
-        # parameters = tuple(set(parent_parameters) - set(omitted_parameters))
-        # parameters += tuple(values.get("_parameters", []))
-        parameters = tuple(values.get("_parameters", []))
-        for parameter in set(omitted_parameters) - set(parent_parameters):
-            warning(f"failed to omit parameter '{parameter}' in category '{name}'")
+        parameters = []
+        # https://github.com/inventree/InvenTree/pull/10699
+        if inventree_api.api_version < 429 and parent:
+            parameters += list(set(parent.parameters) - set(omitted_parameters))
+            for parameter in set(omitted_parameters) - set(parent.parameters):
+                warning(f"failed to omit parameter '{parameter}' in category '{name}'")
+        elif omitted_parameters:
+            warning(
+                "_omit_parameters is disfunctional for InvenTree >= 1.2.0 "
+                "(parent parameters are inherited automatically)"
+            )
+        parameters += values.get("_parameters", [])
 
-        new_path = path + (name,)
-        categories[new_path] = Category(
+        category = Category(
             name=name,
-            path=list(new_path),
+            path=(parent.path if parent else []) + [name],
             description=values.get("_description", name),
             ignore=values.get("_ignore", False),
             structural=values.get("_structural", False),
             aliases=values.get("_aliases", []),
-            parameters=list(parameters),
+            parameters=parameters,
         )
+        categories[tuple(category.path)] = category
 
-        categories.update(parse_category_recursive(values, tuple(), new_path))
+        categories.update(parse_category_recursive(inventree_api, values, category))
 
     return categories
 
