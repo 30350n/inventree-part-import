@@ -73,6 +73,30 @@ class Mouser(ScrapeSupplier):
 
         return list(map(self.get_api_part, filtered_matches)), len(filtered_matches)
 
+    def search_by_ibn(self, ibn_code):
+        if not hasattr(self, "session"):
+            self._setup_session()
+
+        url = f"https://api.mouser.com/api/mobile/v2/search/getIBNs?ibnCode={ibn_code}"
+        for retry in retry_timeouts():
+            with retry:
+                response = self.session.get(url, timeout=self.request_timeout)
+                if response.status_code == 200:
+                    break
+        else:
+            return [], 0
+
+        try:
+            data = response.json()
+        except ValueError:
+            return [], 0
+
+        ibn_list = data.get("IBN", [])
+        if not ibn_list:
+            return [], 0
+
+        return ibn_list
+
     def get_api_part(self, mouser_part):
         mouser_part_number = mouser_part.get("MouserPartNumber")
 
