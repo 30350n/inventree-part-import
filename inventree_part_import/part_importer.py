@@ -8,6 +8,7 @@ from error_helper import BOLD, BOLD_END, error, hint, info, prompt, prompt_input
 from inventree.base import Parameter
 from inventree.company import Company, ManufacturerPart, SupplierPart, SupplierPriceBreak
 from inventree.part import Part
+from inventree.stock import StockItem, StockLocation
 from requests.compat import quote
 from requests.exceptions import HTTPError
 from thefuzz import fuzz
@@ -36,6 +37,9 @@ class PartImporter:
         self.verbose = verbose
         self.dry_run = hasattr(inventree_api, "DRY_RUN")
 
+        self.imported_part = None
+        self.imported_api_part = None
+
         # preload pre_creation_hooks
         get_pre_creation_hooks()
 
@@ -53,12 +57,15 @@ class PartImporter:
             search_term,
             existing_part: Part = None,
             supplier_id=None,
-            only_supplier=False
+            only_supplier=False,
+            stock=None,
         ):
         info(f"searching for {search_term} ...", end="\n")
         import_result = ImportResult.SUCCESS
 
         self.existing_manufacturer_part = None
+        self.imported_part = None
+        self.imported_api_part = None
         search_results = search(search_term, supplier_id, only_supplier)
         for supplier, async_results in search_results:
             info(f"searching at {supplier.name} ...")
@@ -84,7 +91,8 @@ class PartImporter:
                 continue
 
             try:
-                import_result |= self.import_supplier_part(supplier, api_part, existing_part)
+                result = self.import_supplier_part(supplier, api_part, existing_part)
+                import_result |= result
             except HTTPError as e:
                 import_result = ImportResult.ERROR
 
@@ -100,7 +108,6 @@ class PartImporter:
 
                 if self.verbose:
                     error(traceback.format_exc(), prefix="FULL TRACEBACK:\n")
-
             if import_result == ImportResult.ERROR:
                 # let the other api calls finish
                 for _, other_results in search_results:
@@ -109,8 +116,31 @@ class PartImporter:
 
         if not self.existing_manufacturer_part:
             import_result |= ImportResult.FAILURE
+        else:
+            if stock is not None and self.imported_part is not None:
+                if isinstance(stock, bool):
+                    stock_quantity = self._prompt_stock_quantity(
+                        self.imported_api_part or api_part
+                    )
+                elif isinstance(stock, (int, float)):
+                    stock_quantity = float(stock)
+                else:
+                    stock_quantity = None
+                if stock_quantity is not None:
+                    self.setup_stock(self.imported_part, stock_quantity)
 
         return import_result
+
+    def _prompt_stock_quantity(self, api_part: ApiPart):
+        prompt(f"enter stock quantity for {api_part.MPN} ({api_part.SKU})")
+        while True:
+            quantity = prompt_input("stock quantity")
+            if quantity == "":
+                return None
+            try:
+                return float(quantity)
+            except ValueError:
+                warning("invalid stock quantity, enter a number")
 
     @staticmethod
     def select_api_part(api_parts: list[ApiPart]):
@@ -201,6 +231,8 @@ class PartImporter:
             import_result |= result
 
         self.existing_manufacturer_part = manufacturer_part
+        self.imported_part = part
+        self.imported_api_part = api_part
 
         supplier_part_data = {
             "part": 0 if self.dry_run else part.pk,
@@ -315,6 +347,36 @@ class PartImporter:
 
         if updated_pricing:
             info("updating price breaks ...")
+
+    def setup_stock(self, part, quantity):
+        if self.dry_run:
+            return
+
+        # Get or create default stock location
+        stock_locations = StockLocation.list(self.api)
+        if not stock_locations:
+            warning("no stock locations available, skipping stock creation")
+            return
+
+        default_location = stock_locations[0]
+
+        # Check if stock already exists for this part
+        existing_stock = StockItem.list(self.api, part=part.pk, location=default_location.pk)
+        if existing_stock:
+            # Update existing stock
+            stock_item = existing_stock[0]
+            old_quantity = stock_item.quantity
+            if old_quantity != quantity:
+                stock_item.save({"quantity": quantity})
+                info(f"updated stock for {part.name} from {old_quantity} to {quantity}")
+        else:
+            # Create new stock
+            StockItem.create(self.api, {
+                "part": part.pk,
+                "location": default_location.pk,
+                "quantity": quantity,
+            })
+            info(f"created stock for {part.name} with quantity {quantity}")
 
     def setup_parameters(self, part, api_part: ApiPart, update_existing=True):
         import_result = ImportResult.SUCCESS
