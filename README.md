@@ -1,5 +1,5 @@
 [![pypi](https://img.shields.io/pypi/v/inventree-part-import)](https://pypi.org/project/inventree-part-import/)
-[![python](https://img.shields.io/badge/Python-3.10+-blue)](https://www.python.org/)
+[![python](https://img.shields.io/badge/Python-3.11+-blue)](https://www.python.org/)
 [![mit](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 
 # InvenTree Part Import

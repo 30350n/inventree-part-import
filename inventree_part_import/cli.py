@@ -1,7 +1,11 @@
-import importlib.metadata, logging
+import importlib.metadata
+import logging
 from pathlib import Path
+from typing import Any, Callable, Literal, Never, ParamSpec, cast
 
-import click, error_helper, tablib, tablib.formats
+import click
+import error_helper
+import tablib
 from cutie import prompt_yes_or_no, select
 from error_helper import error, hint, info, prompt, success, warning
 from inventree.api import InvenTreeAPI
@@ -10,14 +14,25 @@ from requests.exceptions import HTTPError, Timeout
 from tablib.exceptions import TablibException, UnsupportedFormat
 from thefuzz import fuzz
 
-from .config import (CONFIG, SUPPLIERS_CONFIG, get_config, get_config_dir, set_config_dir,
-                     setup_inventree_api, update_config_file, update_supplier_config)
+from .config import (
+    CONFIG,
+    SUPPLIERS_CONFIG,
+    get_config,
+    get_config_dir,
+    set_config_dir,
+    setup_inventree_api,
+    update_config_file,
+    update_supplier_config,
+)
 from .inventree_helpers import get_category, get_category_parts
 from .part_importer import ImportResult, PartImporter
 from .suppliers import get_suppliers, setup_supplier_companies
 
-def handle_errors(func):
-    def wrapper(*args, **kwargs):
+P = ParamSpec("P")
+
+
+def handle_errors(func: Callable[P, None]) -> Callable[P, None]:
+    def wrapper(*args: Any, **kwargs: Any):
         try:
             func(*args, **kwargs)
         except KeyboardInterrupt:
@@ -36,7 +51,9 @@ def handle_errors(func):
                 error(f"HTTP error ({e})", prefix="FATAL: ")
             else:
                 raise e
+
     return wrapper
+
 
 _suppliers, _available_suppliers = get_suppliers(setup=False)
 SuppliersChoices = click.Choice(_suppliers.keys(), case_sensitive=False)
@@ -44,50 +61,63 @@ AvailableSuppliersChoices = click.Choice(_available_suppliers.keys(), case_sensi
 
 InteractiveChoices = click.Choice(("default", "false", "true", "twice"), case_sensitive=False)
 
-@click.command
+
+@click.group(invoke_without_command=True)
 @click.pass_context
 @click.argument("inputs", nargs=-1)
 @click.option("-s", "--supplier", type=SuppliersChoices, help="Search this supplier first.")
 @click.option("-o", "--only", type=SuppliersChoices, help="Only search this supplier.")
-@click.option("-i", "--interactive", type=InteractiveChoices, default="default", help=(
-    "Enable interactive mode. 'twice' will run once normally, then rerun in interactive "
-    "mode for any parts that failed to import correctly."
-))
+@click.option(
+    "-i",
+    "--interactive",
+    type=InteractiveChoices,
+    default="default",
+    help=(
+        "Enable interactive mode. 'twice' will run once normally, then rerun in interactive "
+        "mode for any parts that failed to import correctly."
+    ),
+)
 @click.option("-d", "--dry", is_flag=True, help="Run without modifying InvenTree database.")
-@click.option("-c", "--config-dir", help="Override path to config directory.")
+@click.option(
+    "-c", "--config-dir", type=click.Path(path_type=Path), help="Override path to config directory."
+)
 @click.option("-v", "--verbose", is_flag=True, help="Enable verbose output for debugging.")
 @click.option("--show-config-dir", is_flag=True, help="Show path to config directory and exit.")
 @click.option("--configure", type=AvailableSuppliersChoices, help="Configure supplier.")
 @click.option("--update", metavar="CATEGORY", help="Update all parts from InvenTree CATEGORY.")
-@click.option("--update-recursive", metavar="CATEGORY",
-    help="Update all parts from InvenTree CATEGORY and from any of it's subcategories."
+@click.option(
+    "--update-recursive",
+    metavar="CATEGORY",
+    help="Update all parts from CATEGORY and any of its subcategories.",
 )
 @click.option("--version", is_flag=True, help="Show version and exit.")
 @handle_errors
 def inventree_part_import(
-    context,
-    inputs,
-    supplier=None,
-    only=None,
-    interactive="false",
-    dry=False,
-    config_dir=False,
-    verbose=False,
-    show_config_dir=False,
-    configure=None,
-    update=None,
-    update_recursive=None,
-    version=False,
+    context: click.Context,
+    inputs: list[str],
+    supplier: str | None = None,
+    only: str | None = None,
+    interactive: Literal["default", "false", "true", "twice"] = "false",
+    dry: bool = False,
+    config_dir: Path | None = None,
+    verbose: bool = False,
+    show_config_dir: bool = False,
+    configure: str | None = None,
+    update: str | None = None,
+    update_recursive: str | None = None,
+    version: bool = False,
 ):
     """Import supplier parts into InvenTree.
 
     INPUTS can either be supplier part numbers OR paths to tabular data files.
     """
 
-    from inventree.api import logger
-    logger.disabled = True
+    from inventree.api import logger as inventree_logger
+
+    inventree_logger.disabled = True
 
     if version:
+        assert __package__
         print(importlib.metadata.version(__package__))
         return
 
@@ -119,10 +149,10 @@ def inventree_part_import(
 
     if configure:
         _, available_suppliers = get_suppliers(reload=True)
-        supplier = available_suppliers[configure]
+        supplier_object = available_suppliers[configure]
         with update_config_file(SUPPLIERS_CONFIG) as suppliers_config:
-            supplier_config = config if (config := suppliers_config.get(configure)) else {}
-            new_config = update_supplier_config(supplier, supplier_config, force_update=True)
+            supplier_config: dict[str, Any] = suppliers_config.get(configure) or {}
+            new_config = update_supplier_config(supplier_object, supplier_config, force_update=True)
             if new_config:
                 suppliers_config[configure] = new_config
         return
@@ -132,8 +162,10 @@ def inventree_part_import(
         return
 
     if interactive == "default":
-        interactive = str(get_config()["interactive"]).lower()
-        if interactive not in set(InteractiveChoices.choices) - {"default"}:
+        default = str(get_config()["interactive"]).lower()
+        if default in set(InteractiveChoices.choices) - cast(set[Literal["default"]], {"default"}):
+            interactive = default
+        else:
             warning(f"invalid value 'interactive: {interactive}' in '{CONFIG}'")
             interactive = "false"
 
@@ -152,10 +184,11 @@ def inventree_part_import(
     if dry:
         warning(DRY_MODE_WARNING, prefix="")
         inventree_api = DryInvenTreeAPI()
-    else:
-        inventree_api = setup_inventree_api()
+    elif not (inventree_api := setup_inventree_api()):
+        return
 
-    if (category_path := update_recursive or update):
+    parts: list[str | Part]
+    if category_path := update_recursive or update:
         if update_recursive and update:
             hint("--update is being overridden by --update-recursive")
 
@@ -169,7 +202,9 @@ def inventree_part_import(
         if not (category := get_category(inventree_api, category_path)):
             error(f"no such category '{category_path}'")
             return
-        parts = [part for part in get_category_parts(category, bool(update_recursive))]
+        parts = [
+            part for part in get_category_parts(inventree_api, category, bool(update_recursive))
+        ]
     else:
         parts = []
         for name in inputs:
@@ -198,21 +233,24 @@ def inventree_part_import(
         info(f"updating {len(parts)} parts from '{category_path}'", end="\n")
         print()
 
-    failed_parts = []
-    incomplete_parts = []
+    failed_parts: list[str | Part] = []
+    incomplete_parts: list[str | Part] = []
 
     try:
+        last_import_result = None
         for index, part in enumerate(parts):
             last_import_result = (
                 importer.import_part(part.name, part, supplier, only_supplier)
-                if isinstance(part, Part) else
-                importer.import_part(part, None, supplier, only_supplier)
+                if isinstance(part, Part)
+                else importer.import_part(part, None, supplier, only_supplier)
             )
             print()
             match last_import_result:
+                case ImportResult.SUCCESS:
+                    pass
                 case ImportResult.ERROR:
                     failed_parts.append(part)
-                    incomplete_parts += parts[index + 1:]
+                    incomplete_parts += parts[index + 1 :]
                     break
                 case ImportResult.FAILURE:
                     failed_parts.append(part)
@@ -229,10 +267,12 @@ def inventree_part_import(
             for part in parts2:
                 import_result = (
                     importer.import_part(part.name, part, supplier, only_supplier)
-                    if isinstance(part, Part) else
-                    importer.import_part(part, None, supplier, only_supplier)
+                    if isinstance(part, Part)
+                    else importer.import_part(part, None, supplier, only_supplier)
                 )
                 match import_result:
+                    case ImportResult.SUCCESS:
+                        pass
                     case ImportResult.ERROR | ImportResult.FAILURE:
                         failed_parts.append(part)
                     case ImportResult.INCOMPLETE:
@@ -255,6 +295,7 @@ def inventree_part_import(
         action = "updated" if update or update_recursive else "imported"
         success(f"{action} all parts!")
 
+
 def load_tabular_data(path: Path):
     info(f"reading {path.name} ...")
     with path.open(encoding="utf-8") as file:
@@ -276,7 +317,7 @@ def load_tabular_data(path: Path):
 
     headers = {
         stripped: i
-        for i, header in enumerate(data.headers)
+        for i, header in enumerate(cast(list[str], data.headers))
         if (stripped := header.strip())
     }
     sorted_headers = sorted(
@@ -294,7 +335,8 @@ def load_tabular_data(path: Path):
         index = select(sorted_headers, deselected_prefix="  ", selected_prefix="> ")
         column_index = headers[sorted_headers[index]]
 
-    return data.get_col(column_index)
+    return cast(list[str], data.get_col(column_index))
+
 
 def load_single_column_csv(path: Path):
     if path.suffix not in {".csv", ".txt", ""}:
@@ -305,10 +347,9 @@ def load_single_column_csv(path: Path):
 
     data = content.split("\n")
     info(f"importing '{path.name}' as single column csv file", end="\n")
-    has_header = prompt_yes_or_no(
-        f"is the first row '{data[0]}' a header?", default_is_yes=True
-    )
+    has_header = prompt_yes_or_no(f"is the first row '{data[0]}' a header?", default_is_yes=True)
     return data[1:] if has_header else data
+
 
 DRY_MODE_WARNING = (
     "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"
@@ -317,27 +358,56 @@ DRY_MODE_WARNING = (
     "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"
 )
 
+
 class DryInvenTreeAPI(InvenTreeAPI):
     DRY_RUN = True
 
-    def __init__(self, host=None, **kwargs):
+    def __init__(self, host: None = None, **kwargs: Any):
         self.base_url = "inventree/"
+        self.api_version = 999999
+        self._pks: dict[str, int] = {}
+        self._pathstings: dict[int, str] = {}
         pass
 
-    def get(self, url, **kwargs):
+    def get(self, url: str, **kwargs: Any) -> dict[str, Any]:
         url_split = url.strip("/").split("/")
         if url_split[-1].isnumeric():
-            raise HTTPError({"status_code": 404})
-        return []
+            raise HTTPError({"status_code": 404, "body": "DRY_RUN"})
+        return {"results": None}
 
-    def post(self, url, data, **kwargs):
-        return {"pk": 1, "url": "", **data}
+    def patch(self, url: str, data: dict[str, Any], **kwargs: Any):
+        pass
 
-    def testServer(self):
+    def post(self, url: str, data: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        pk = self._pks.setdefault(url, 1)
+        self._pks[url] += 1
+
+        data_out = {"pk": pk, "url": f"{url}{pk}/", **data}
+
+        match url:
+            case "part/":
+                data_out["image"] = None
+            case "part/category/":
+                parent_pathstring = self._pathstings.get(data.get("parent", -1))
+                pathstring = (f"{parent_pathstring}/" if parent_pathstring else "") + data["name"]
+                data_out["pathstring"] = self._pathstings[pk] = pathstring
+            case _:
+                pass
+
+        return data_out
+
+    def testServer(self) -> Never:
         raise NotImplementedError()
 
-    def request(self, api_url, **kwargs):
+    def request(self, url: str, **kwargs: Any) -> Never:
         raise NotImplementedError()
 
-    def downloadFile(self, url, destination, overwrite=False, params=None, proxies=...):
+    def downloadFile(
+        self,
+        url: str,
+        destination: str,
+        overwrite: bool = False,
+        params: Any = None,
+        proxies: ... = ...,
+    ) -> Never:
         raise NotImplementedError()

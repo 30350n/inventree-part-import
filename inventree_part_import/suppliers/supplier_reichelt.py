@@ -1,15 +1,17 @@
 import re
+from typing import Any
 
 from bs4 import BeautifulSoup
-from error_helper import error, warning
-from requests.compat import quote, urljoin
+from error_helper import warning
+from requests.compat import quote
 
-from ..localization import get_language
+from ..localization import get_country, get_language
 from .base import ApiPart, ScrapeSupplier, SupplierSupportLevel, money2float
 
-BASE_URL = "https://reichelt.com/"
-LOCALE_CHANGE_URL = f"{BASE_URL}index.html?ACTION=12&PAGE=46"
-SEARCH_URL = f"{BASE_URL}index.html?ACTION=446&q={{}}"
+BASE_URL = "https://reichelt.com"
+PRODUCT_PAGE = "shop/product"
+SEARCH_PAGE = "shop/search"
+
 
 class Reichelt(ScrapeSupplier):
     SUPPORT_LEVEL = SupplierSupportLevel.SCRAPING
@@ -17,55 +19,52 @@ class Reichelt(ScrapeSupplier):
     def setup(
         self,
         *,
-        language,
-        location,
-        scraping,
-        interactive_part_matches,
-        browser_cookies="",
-        **kwargs
+        language: str,
+        location: str,
+        scraping: str,
+        interactive_part_matches: int,
+        browser_cookies: str = "",
+        **kwargs: Any,
     ):
-        if location not in LOCATION_MAP:
-            return self.load_error(f"unsupported location '{location}'")
+        if not scraping:
+            self.load_error("scraping is disabled")
+
+        if not get_country(location):
+            self.load_error(f"unsupported location '{location}'")
 
         if not get_language(language):
-            return self.load_error(f"invalid language code '{language}'")
-
-        if not scraping:
-            error(f"failed to load '{self.name}' module (scraping is disabled)")
-            return False
+            self.load_error(f"invalid language code '{language}'")
 
         self.language = language
         self.location = location
-        self.localized_url = f"{BASE_URL}{self.location.lower()}/{self.language.lower()}/"
-        self.locale_confirm_regex = re.compile(
-            rf";CCOUNTRY={LOCATION_MAP[self.location]};LANGUAGE={self.language};CTYPE=1;"
-        )
+        self.localized_url = f"{BASE_URL}/{self.location.lower()}/{self.language.lower()}"
 
         if browser_cookies:
             self.cookies_from_browser(browser_cookies, "reichelt.com")
 
         self.max_results = interactive_part_matches
 
-        return True
-
-    def search(self, search_term):
+    def search(self, search_term: str) -> tuple[list[ApiPart], int]:
         if SKU_REGEX.fullmatch(search_term):
-            sku_link = f"{self.localized_url}-{search_term}.html"
+            sku_link = f"{self.localized_url}/{PRODUCT_PAGE}/-{search_term}.html"
             if product_page := self.scrape(sku_link):
                 product_page_soup = BeautifulSoup(product_page.content, "html.parser")
                 return [self.get_api_part(product_page_soup, search_term, sku_link)], 1
 
         search_safe = quote(search_term, safe="")
-        if not (result := self.scrape(SEARCH_URL.format(search_safe))):
+        search_url = f"{self.localized_url}/{SEARCH_PAGE}/{search_term}?search={search_safe}"
+        if not (result := self.scrape(search_url)):
             return [], 0
 
         search_soup = BeautifulSoup(result.content, "html.parser")
 
-        api_parts = []
+        api_parts: list[ApiPart] = []
         search_results = search_soup.find_all("div", class_="al_gallery_article")
-        for result in search_results[:self.max_results]:
-            product_url = result.find("a", itemprop="url")["href"]
-            sku = PRODUCT_URL_SKU_REGEX.match(product_url).group(1).upper()
+        for result in search_results[: self.max_results]:
+            assert (url_tag := result.find("a", itemprop="url"))
+            assert isinstance(product_url := url_tag["href"], str)
+            assert (sku_match := PRODUCT_URL_SKU_REGEX.match(product_url))
+            sku = sku_match.group(1).upper()
 
             sku_link = f"{self.localized_url}-{sku.lower()}.html"
             if not (product_page := self.scrape(sku_link)):
@@ -80,7 +79,8 @@ class Reichelt(ScrapeSupplier):
             api_parts.append(api_part)
 
         exact_matches = [
-            api_part for api_part in api_parts
+            api_part
+            for api_part in api_parts
             if api_part.SKU.lower() == search_term.lower()
             or api_part.MPN.lower() == search_term.lower()
         ]
@@ -90,64 +90,62 @@ class Reichelt(ScrapeSupplier):
         n_results = len(search_results)
         return api_parts, n_results if n_results > self.max_results else len(api_parts)
 
-    def get_api_part(self, soup, sku, link):
-        description = soup.find(id="av_articleheader").find("span", itemprop="name").text
+    def get_api_part(self, soup: BeautifulSoup, sku: str, url: str):
+        assert (desc_tag := soup.select_one('div.productDescription p[itemprop="description"]'))
+        description = desc_tag.text
 
-        bigimage = soup.find(id="av_bildbox").find(id="bigimages nohighlight")
-        image_url = bigimage.find("img")["src"] if bigimage else None
+        image_url = None
+        if image_tag := soup.select_one('div[id="product"] img'):
+            assert isinstance(image_tag_src := image_tag["src"], str)
+            image_url = IMAGE_URL_REGEX.sub(IMAGE_URL_SUB, image_tag_src)
 
         datasheet_url = None
-        if datasheet_view := soup.find(id="av_datasheetview"):
-            if datasheet := datasheet_view.find(class_="av_datasheet"):
-                datasheet_url = urljoin(BASE_URL, datasheet.find("a")["href"])
+        if datasheet_tag := soup.select_one("div.articleDatasheet a"):
+            assert isinstance(datasheet_url := datasheet_tag["href"], str)
 
-        availability = soup.find("p", class_="availability").find("span")["class"][0]
-        if availability not in AVAILABILITY_MAP:
-            warning(f"unknown reichelt availability '{availability}' ({link})")
+        availability = 0
+        if availability_tag := soup.select_one("a.availability"):
+            status = next((c for c in availability_tag["class"] if c.startswith("status_")), None)
+            if status and not (availability := AVAILABILITY_MAP.get(status, 0)):
+                warning(f"unknown reichelt availability '{status}' ({url})")
 
-        breadcrumb = soup.find("ol", id="breadcrumb")
         category_path = [
-            li.find("a").text
-            for li in breadcrumb.find_all("li", itemprop="itemListElement")[1:]
+            span.text.strip()
+            for span in soup.select('ol#breadcrumb li a span[itemprop="name"]')[1:]
         ]
 
-        parameters = {
-            prop_name.text.strip(): prop_value.text.strip()
-            for ul in soup.find("div", id="av_props_inline").find_all("ul", class_="clearfix")
-            if (prop_name := ul.find("li", "av_propname"))
-            and (prop_value := ul.find("li", "av_propvalue"))
-        }
+        parameters_flat = [li.text.strip() for li in soup.select("ul.articleAttribute li")]
+        assert len(parameters_flat) % 2 == 0
+        parameters: dict[str, str] = dict(zip(parameters_flat[::2], parameters_flat[1::2]))
 
         if not (manufacturer := parameters.get("Manufacturer")):
             manufacturer = "Reichelt"
 
-        if not (mpn := parameters.get("Factory number")):
-            mpn = soup.find("meta", itemprop="productID")["content"].replace(" ", "")
-            if mpn.startswith("mpn:"):
-                mpn = mpn[4:]
+        assert (mpn_tag := soup.select_one("li[itemprop='mpn']"))
+        mpn = mpn_tag.text
 
-        price_breaks = {}
-        if price := soup.find("meta", itemprop="price"):
-            price_breaks[1] = float(price["content"].replace(",", ""))
-        if discounts := soup.find(id="av_price_discount"):
-            for discount in discounts.find("table").find_all("td")[1:]:
-                quantity, price = discount.find_all(text=True)
-                price_breaks[float(quantity)] = money2float(price.text)
+        assert (meta_price := soup.select_one('meta[itemprop="price"]'))
+        assert isinstance(meta_price_content := meta_price["content"], str)
+        price_breaks: dict[int | float, float] = {1: money2float(meta_price_content)}
+        for discount_tag in soup.select("div.discountValue ul li p#productPrice")[1:]:
+            assert discount_tag.parent and (quantity_tag := discount_tag.parent.select_one("span"))
+            quantity_str = PRICE_BREAK_QUANTITIY_REGEX.sub("", quantity_tag.text).strip()
+            assert " " not in quantity_str
+            price_breaks[float(quantity_str)] = money2float(discount_tag.text)
 
-        currency = None
-        if meta := soup.find("meta", itemprop="priceCurrency"):
-            currency = meta["content"]
+        assert (meta_currency := soup.select_one('meta[itemprop="price"]'))
+        assert isinstance(currency := meta_currency["content"], str)
 
         return ApiPart(
             description=description,
             image_url=image_url,
             datasheet_url=datasheet_url,
-            supplier_link=link,
+            supplier_link=url,
             SKU=sku.upper(),
             manufacturer=manufacturer,
             manufacturer_link="",
             MPN=mpn,
-            quantity_available=AVAILABILITY_MAP.get(availability),
+            quantity_available=availability,
             packaging="",
             category_path=category_path,
             parameters=parameters,
@@ -155,49 +153,21 @@ class Reichelt(ScrapeSupplier):
             currency=currency,
         )
 
-    def setup_hook(self):
-        form_page = self.session.get(LOCALE_CHANGE_URL, timeout=self.request_timeout)
-        if form_page.status_code == 200:
-            soup = BeautifulSoup(form_page.content, "html.parser")
-            form_url = soup.find("form", attrs={"name": "contentform"}).attrs["action"]
 
-            result = self.session.post(form_url, timeout=self.request_timeout, data={
-                "CCOUNTRY": LOCATION_MAP[self.location],
-                "LANGUAGE": self.language,
-                "CTYPE": 1,
-            })
-            if result.status_code == 200:
-                soup = BeautifulSoup(result.content, "html.parser")
-                statistics = soup.find("img", width="0", height="0")
-                if self.locale_confirm_regex.search(statistics.get("src", "")):
-                    return
-
-        warning("failed to set Reichelt locales")
-
-IMAGE_URL_FULLSIZE_REGEX = re.compile(r"/resize/[^/]+/[^/]+/")
-IMAGE_URL_FULLSIZE_SUB = "/images/"
+IMAGE_URL_REGEX = re.compile(r"/resize/[^/]+/([^?]+)\?.*")
+IMAGE_URL_SUB = r"/images/\g<1>"
 SKU_REGEX = re.compile(r"^[pP]\d+$")
 PRODUCT_URL_SKU_REGEX = re.compile(r"^.*([pP]\d+)\.html[^\.]*$")
+PRICE_BREAK_QUANTITIY_REGEX = re.compile(r"[^0-9 ]")
 
-# None -> available, 0 -> not available
+# True -> available, 0 -> not available
 AVAILABILITY_MAP = {
-    "status_1": None,
+    "status_1": True,
     "status_2": 0,
-    "status_3": None,
-    "status_4": None,
+    "status_3": True,
+    "status_4": True,
     "status_5": 0,
     "status_6": 0,
-    "status_7": None,
+    "status_7": True,
     "status_8": 0,
-}
-
-LOCATION_MAP = {
-    "AT": 458,
-    "FR": 443,
-    "DE": 445,
-    "IT": 446,
-    "NL": 662,
-    "PL": 470,
-    "CH": 459,
-    "US": 550,
 }

@@ -3,33 +3,35 @@ import re
 import time
 from dataclasses import dataclass
 from enum import IntEnum
-from functools import cache
 from http.cookiejar import CookieJar
-from inspect import _empty
+from typing import Any, Callable, Literal, cast
 
 import browser_cookie3
 from error_helper import error, warning
 from fake_useragent import UserAgent
 from requests import Response, Session
 
+from inventree_part_import.exceptions import SupplierError, SupplierLoadError
+
 from ..config import get_config, get_pre_creation_hooks
-from ..retries import retry_timeouts
+from ..retries import setup_session
+
 
 @dataclass
 class ApiPart:
     description: str
-    image_url: str
-    datasheet_url: str
+    image_url: str | None
+    datasheet_url: str | None
     supplier_link: str
     SKU: str
     manufacturer: str
     manufacturer_link: str
     MPN: str
-    quantity_available: float
+    quantity_available: int | float | Literal[True]
     packaging: str
     category_path: list[str]
     parameters: dict[str, str]
-    price_breaks: dict[int, float]
+    price_breaks: dict[int | float, float]
     currency: str
 
     def __post_init__(self):
@@ -64,7 +66,7 @@ class ApiPart:
         }
 
     def get_supplier_part_data(self):
-        data = {
+        data: dict[str, Any] = {
             "description": self.description[:250],
             "link": self.supplier_link[:200],
             "packaging": self.packaging[:50],
@@ -83,20 +85,22 @@ class ApiPart:
         if self.manufacturer_link and self.manufacturer_link.startswith("//"):
             self.manufacturer_link = f"https:{self.manufacturer_link}"
 
+
 class SupplierSupportLevel(IntEnum):
     OFFICIAL_API = 0
     INOFFICIAL_API = 1
     SCRAPING = 2
 
+
 class Supplier:
     SUPPORT_LEVEL: SupplierSupportLevel
 
-    def setup(self, **kwargs) -> bool:
-        return True
+    def setup(self, **kwargs: Any):
+        pass
 
-    def _get_setup_params(self):
+    def get_setup_params(self):
         return {
-            name: None if parameter.default is _empty else parameter.default
+            name: None if parameter.default is parameter.empty else parameter.default
             for name, parameter in inspect.signature(self.setup).parameters.items()
             if name not in {"self", "kwargs"}
         }
@@ -104,36 +108,40 @@ class Supplier:
     def search(self, search_term: str) -> tuple[list[ApiPart], int]:
         raise NotImplementedError()
 
-    @cache
     def cached_search(self, search_term: str) -> tuple[list[ApiPart], int]:
-        return self.search(search_term)
+        if not hasattr(self, "_cache"):
+            self._cache: dict[str, tuple[list[ApiPart], int]] = {}
+        elif result := self._cache.get(search_term):
+            return result
+        self._cache[search_term] = (result := self.search(search_term))
+        return result
 
     @property
     def name(self):
         return self.__class__.__name__
 
-    def load_error(self, message):
-        error(f"failed to load '{self.name}' supplier module ({message})")
-        return False
+    def load_error(self, message: str):
+        raise SupplierLoadError(self.__class__.__name__, message)
+        error(f"failed to load '{self.name}' supplier module ({message})")  # TODO
+
+    def error(self, message: str):
+        raise SupplierError(self.__class__.__name__, message)
+
 
 class ScrapeSupplier(Supplier):
     session: Session
     cookies = CookieJar()
 
-    extra_headers = {}
+    extra_headers: dict[str, str] = {}
     fallback_domains = [None]
 
-    def scrape(self, url) -> Response | None:
+    def scrape(self, url: str) -> Response | None:
         if not hasattr(self, "session"):
             self._setup_session()
 
-        for retry in retry_timeouts():
-            with retry:
-                result = self.session.get(
-                    url, headers=self.extra_headers, timeout=self.request_timeout
-                )
-                if result.status_code == 200:
-                    return result
+        result = self.session.get(url, headers=self.extra_headers, timeout=self.request_timeout)
+        if result.status_code == 200:
+            return result
 
         for fallback in self.fallback_domains:
             fallback_str = f"via '{fallback}' " if fallback else ""
@@ -146,18 +154,16 @@ class ScrapeSupplier(Supplier):
             self._setup_session()
 
             fallback_url = DOMAIN_REGEX.sub(DOMAIN_SUB.format(fallback), url) if fallback else url
-            for retry in retry_timeouts():
-                with retry:
-                    result = self.session.get(fallback_url, headers=self.extra_headers)
-                    if result.status_code == 200:
-                        return result
+            result = self.session.get(fallback_url, headers=self.extra_headers)
+            if result.status_code == 200:
+                return result
 
     def cookies_from_browser(self, name: str, domain_name: str):
-        all_browsers = browser_cookie3.all_browsers
+        all_browsers = cast(list[Callable[[Any], None]], browser_cookie3.all_browsers)
         if not (browser := getattr(browser_cookie3, name, None)) or browser not in all_browsers:
             warning(
                 f"failed to load cookies from browser '{name}' (not in "
-                f"[{', '.join(browser.__name__ for browser in browser_cookie3.all_browsers)}])"
+                f"[{', '.join(browser.__name__ for browser in all_browsers)}])"
             )
             return
 
@@ -171,17 +177,14 @@ class ScrapeSupplier(Supplier):
         pass
 
     def _setup_session(self):
-        self.session = Session()
-        self.session.cookies.update(self.cookies)
-        self.session.headers.update({
-            # using iOS User-Agents seems to help to with mouser crawling
-            "User-Agent": UserAgent(os=["iOS"]).random,
-            "Accept-Language": "en-US,en",
-        })
+        self.session = setup_session()
+        self.session.cookies.update(self.cookies)  # pyright: ignore[reportUnknownMemberType]
+        # using iOS User-Agents seems to help to with mouser crawling
+        self.session.headers.update(
+            {"User-Agent": UserAgent(os=["iOS"]).random, "Accept-Language": "en-US,en"}
+        )
 
-        for retry in retry_timeouts():
-            with retry:
-                self.setup_hook()
+        self.setup_hook()
 
     @property
     def request_timeout(self) -> float:
@@ -191,17 +194,24 @@ class ScrapeSupplier(Supplier):
     def retry_timeout(self) -> float:
         return config["request_timeout"] if (config := get_config()) else 0.0
 
+
 DOMAIN_REGEX = re.compile(r"(https?://)(?:[^./]*\.?)*/")
 DOMAIN_SUB = "\\g<1>{}/"
 
 REMOVE_HTML_TAGS = re.compile(r"<.*?>|&([a-z0-9]+|#[0-9]{1,6}|#x[0-9a-f]{1,6});")
 
-def money2float(money):
+
+def money2float(money: str):
     money = MONEY2FLOAT_CLEANUP.sub("", money).strip()
-    decimal, fraction = MONEY2FLOAT_SPLIT.match(money).groups()
+    if split_match := MONEY2FLOAT_SPLIT.match(money):
+        decimal, fraction = split_match.groups()
+    else:
+        decimal = money
+        fraction = "0"
     decimal = MONEY2FLOAT_CLEANUP2.sub("", decimal).strip()
     fraction = MONEY2FLOAT_CLEANUP2.sub("", fraction).strip()
     return float(f"{decimal}.{fraction}")
+
 
 MONEY2FLOAT_CLEANUP = re.compile(r"[^(\d,.\-)]")
 MONEY2FLOAT_SPLIT = re.compile(r"(.*)(?:\.|,)(\d+)")

@@ -1,30 +1,29 @@
 import re
+from typing import Any
 
-import requests
-from error_helper import error
 from fake_useragent import UserAgent
 from requests.compat import quote
-from requests.exceptions import HTTPError, JSONDecodeError, Timeout
+from requests.exceptions import JSONDecodeError
 
-from ..retries import retry_timeouts
+from inventree_part_import.exceptions import SupplierError
+
+from .. import retries
 from .base import REMOVE_HTML_TAGS, ApiPart, Supplier, SupplierSupportLevel
 
 
 class LCSC(Supplier):
     SUPPORT_LEVEL = SupplierSupportLevel.INOFFICIAL_API
 
-    def setup(self, *, currency, ignore_duplicates=True, **kwargs):
+    def setup(self, *, currency: str, ignore_duplicates: bool = True, **kwargs: Any):
         if currency not in CURRENCY_MAP.values():
-            return self.load_error(f"unsupported currency '{currency}'")
+            self.load_error(f"unsupported currency '{currency}'")
 
         self.currency = currency
         self.ignore_duplicates = ignore_duplicates
 
         self.lcsc_api = LCSCApi(self.currency)
 
-        return True
-
-    def search(self, search_term):
+    def search(self, search_term: str) -> tuple[list[ApiPart], int]:
         if not (result := self.lcsc_api.search(search_term)):
             return [], 0
 
@@ -64,7 +63,7 @@ class LCSC(Supplier):
 
         return [], 0
 
-    def get_api_part(self, lcsc_part):
+    def get_api_part(self, lcsc_part: dict[str, Any]):
         if not (description := lcsc_part.get("productDescEn")):
             description = lcsc_part.get("productIntroEn")
         description = description.strip() if description else ""
@@ -75,7 +74,7 @@ class LCSC(Supplier):
                 if "front" in image_url:
                     break
 
-        datasheet_url = lcsc_part.get("pdfUrl").replace(
+        datasheet_url = lcsc_part["pdfUrl"].replace(
             "//datasheet.lcsc.com/", "//wmsc.lcsc.com/wmsc/upload/file/pdf/v2/"
         )
 
@@ -93,7 +92,7 @@ class LCSC(Supplier):
         product_arrange = lcsc_part.get("productArrange")
         packaging = REMOVE_HTML_TAGS.sub("", product_arrange) if product_arrange else ""
 
-        category_path = []
+        category_path: list[str] = []
         if parent := lcsc_part.get("parentCatalogName"):
             category_path.append(parent)
         if category := lcsc_part.get("catalogName"):
@@ -144,42 +143,45 @@ class LCSCApi:
     PRODUCT_INFO_URL = f"{API_BASE_URL}product/detail?productCode={{}}"
     CURRENCY_URL = "https://wmsc.lcsc.com/wmsc/home/currency?currencyCode={}"
 
-    def __init__(self, currency):
-        self.session = requests.Session()
+    def __init__(self, currency: str):
+        self.session = retries.setup_session()
         self.session.headers.update(
             {"User-Agent": UserAgent(os=["iOS"]).random, "Accept-Language": "en-US,en"}
         )
         self.session.get(self.CURRENCY_URL.format(currency))
 
-    def search(self, keyword):
+    def search(self, keyword: str):
         return self._api_call(self.SEARCH_URL, json={"keyword": keyword})
 
-    def product_detail(self, product_code):
+    def product_detail(self, product_code: str):
         return self._api_call(self.PRODUCT_INFO_URL.format(quote(product_code, safe="")))
 
-    def _api_call(self, url, json=None):
-        result = None
+    def _api_call(self, url: str, json: dict[str, Any] | None = None):
+        result = self.session.get(url) if json is None else self.session.post(url, json=json)
+
+        if not result.content:
+            raise SupplierError(
+                "LCSC", f"Request failed with code {result.status_code} (no content)"
+            )
 
         try:
-            for retry in retry_timeouts():
-                with retry:
-                    result = (
-                        self.session.get(url) if json is None else self.session.post(url, json=json)
-                    )
-                    result.raise_for_status()
-            assert result is not None
-            return result.json().get("result")
-        except (HTTPError, Timeout):
-            assert result is not None
-            error(result.json()["msg"], prefix="LCSC API error: ")
-        except (JSONDecodeError, KeyError) as e:
-            error(str(e), prefix="LCSC API error: ")
+            content_json: dict[str, Any] = result.json()
+        except JSONDecodeError as e:
+            raise SupplierError("LCSC", str(e))
+
+        if result.status_code != 200:
+            if message := content_json.get("msg"):
+                raise SupplierError("LCSC", message)
+            else:
+                raise SupplierError("LCSC", "Unknown error")
+
+        return content_json["result"]
 
 
 CLEANUP_URL_ID_REGEX = re.compile(r"[^\w\d\.]")
 
 
-def cleanup_url_id(url):
+def cleanup_url_id(url: str):
     url = url.replace(" / ", "_")
     url = CLEANUP_URL_ID_REGEX.sub("_", url)
     return url

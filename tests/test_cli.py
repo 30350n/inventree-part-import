@@ -1,4 +1,5 @@
-import re, shutil
+import re
+import shutil
 from pathlib import Path
 
 import yaml
@@ -8,8 +9,13 @@ from inventree.part import ParameterTemplate, PartCategory
 
 from inventree_part_import.categories import setup_config_from_inventree
 from inventree_part_import.cli import inventree_part_import
-from inventree_part_import.config import (CATEGORIES_CONFIG, CONFIG, INVENTREE_CONFIG,
-                                          PARAMETERS_CONFIG, SUPPLIERS_CONFIG)
+from inventree_part_import.config import (
+    CATEGORIES_CONFIG,
+    CONFIG,
+    INVENTREE_CONFIG,
+    PARAMETERS_CONFIG,
+    SUPPLIERS_CONFIG,
+)
 
 HOST = "http://localhost:55555"
 USERNAME = "testuser"
@@ -20,15 +26,18 @@ DEFAULT_CONFIG_DIR = Path(__file__).parent.parent / "inventree_part_import" / "c
 DEFAULT_CATEGORIES_CONFIG = DEFAULT_CONFIG_DIR / "default_categories.yaml"
 DEFAULT_PARAMETERS_CONFIG = DEFAULT_CONFIG_DIR / "default_parameters.yaml"
 
+
 def test_config_dir_override():
     shutil.rmtree(TEST_CONFIG_DIR, ignore_errors=True)
     result = CliRunner().invoke(
-        inventree_part_import, ("-c", str(TEST_CONFIG_DIR), "--show-config-dir"),
+        inventree_part_import,
+        ("-c", str(TEST_CONFIG_DIR), "--show-config-dir"),
         input="\n",
     )
     assert result.exit_code == 0
     assert str(TEST_CONFIG_DIR.resolve()) in result.output
     assert TEST_CONFIG_DIR.exists()
+
 
 class TestCli:
     def setup_class(self):
@@ -38,11 +47,10 @@ class TestCli:
         self.api = InvenTreeAPI(HOST, username=USERNAME, password=PASSWORD, use_token_auth=True)
 
         (TEST_CONFIG_DIR / CONFIG).write_text(
-            "currency: EUR\nlanguage: EN\nlocation: DE\nscraping: true\ndatasheets: upload\n")
-        (TEST_CONFIG_DIR / INVENTREE_CONFIG).write_text(
-            f"host: {HOST}\ntoken: {self.api.token}\n")
-        (TEST_CONFIG_DIR / SUPPLIERS_CONFIG).write_text(
-            "lcsc:\n    ignore_duplicates: true\n")
+            "currency: EUR\nlanguage: EN\nlocation: DE\nscraping: true\ndatasheets: upload\n"
+        )
+        (TEST_CONFIG_DIR / INVENTREE_CONFIG).write_text(f"host: {HOST}\ntoken: {self.api.token}\n")
+        (TEST_CONFIG_DIR / SUPPLIERS_CONFIG).write_text("lcsc:\n    ignore_duplicates: true\n")
         shutil.copy(DEFAULT_CATEGORIES_CONFIG, TEST_CONFIG_DIR / CATEGORIES_CONFIG)
         shutil.copy(DEFAULT_PARAMETERS_CONFIG, TEST_CONFIG_DIR / PARAMETERS_CONFIG)
 

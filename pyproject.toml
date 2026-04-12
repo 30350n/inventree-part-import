@@ -1,9 +1,9 @@
 [project]
 name = "inventree-part-import"
-version = "1.9.2"
+version = "1.10.0"
 description = "CLI to import parts from suppliers like DigiKey, LCSC, Mouser, etc. to InvenTree"
 readme = "README.md"
-requires-python = ">=3.10,<4.0"
+requires-python = ">=3.11,<4.0"
 classifiers = [
     "Environment :: Console",
     "Framework :: InvenTree",
@@ -11,6 +11,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Development Status :: 5 - Production/Stable",
+    "Typing :: Typed",
 ]
 license = "MIT"
 authors = [{ name = "Bobbe", email = "mail@30350n.de" }]
@@ -22,9 +23,9 @@ dependencies = [
     "error-helper",
     "fake-useragent",
     "inventree>=0.20",
-    "isocodes",
+    "isocodes>=2025.8.13",
     "mouser>=0.1.5",
-    "platformdirs>=3.2.0",
+    "platformdirs>=3.2",
     "pyyaml",
     "requests",
     "requests-oauthlib",
@@ -35,8 +36,8 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/30350n/inventree_part_import"
 
-[project.scripts]
-inventree-part-import = "inventree_part_import.cli:inventree_part_import"
+[dependency-groups]
+dev = ["basedpyright", "pytest", "ruff"]
 
 [build-system]
 requires = ["hatchling"]
@@ -44,33 +45,30 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build]
 exclude = [
+    ".direnv/",
+    ".jj/",
     ".git/",
     ".github/",
     ".gitignore",
     ".gitmodules",
     ".pre-commit-config.yaml",
     "tests/",
+    ".envrc",
     "tasks.py",
     "flake.nix",
     "flake.lock",
 ]
 
-[project.optional-dependencies]
-dev = ["autopep8", "pre-commit", "pytest"]
+[tool.uv.sources]
+inventree = { git = "https://github.com/30350n/inventree-python", branch = "type-hints" }
 
-[tool.autopep8]
-aggressive = 3
-max_line_length = 96
-ignore = "E12,E13,E201,E202,E221,E241,E261,E302,E305,E401,E402"
+[tool.ruff]
+line-length = 100
+[tool.ruff.lint.isort]
+combine-as-imports = true
 
-[tool.isort]
-line_length = 96
-lines_after_imports = 1
-combine_straight_imports = true
-
-[tool.pytest.ini_options]
-filterwarnings = ["ignore::DeprecationWarning:fake_useragent.*"]
-pythonpath = ["."]
-
-[tool.codespell]
-ignore-words-list = "leaded"
+[tool.basedpyright]
+typeCheckingMode = "strict"
+reportInvalidCast = "warning"
+reportUnnecessaryTypeIgnoreComment = "warning"
+allowedUntypedLibraries = ["browser_cookie3", "cutie", "inventree", "mouser", "tablib", "thefuzz"]

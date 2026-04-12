@@ -1,11 +1,12 @@
 import os
 from types import MethodType
+from typing import Any, cast
 
 from bs4 import BeautifulSoup
 from error_helper import hint, warning
-from mouser.api import MouserPartSearchRequest
+from mouser.api import MouserPartSearchRequest as _MouserPartSearchRequest
 
-from ..retries import retry_timeouts
+from .. import retries
 from .base import (
     DOMAIN_REGEX,
     DOMAIN_SUB,
@@ -16,6 +17,7 @@ from .base import (
     money2float,
 )
 
+
 class Mouser(ScrapeSupplier):
     SUPPORT_LEVEL = SupplierSupportLevel.SCRAPING
 
@@ -24,12 +26,12 @@ class Mouser(ScrapeSupplier):
     def setup(
         self,
         *,
-        api_key,
-        currency,
-        scraping,
-        browser_cookies="",
-        locale_url="www.mouser.com",
-        **kwargs,
+        api_key: str,
+        currency: str,
+        scraping: bool,
+        browser_cookies: str = "",
+        locale_url: str = "www.mouser.com",
+        **kwargs: Any,
     ):
         os.environ["MOUSER_PART_API_KEY"] = api_key
 
@@ -40,17 +42,14 @@ class Mouser(ScrapeSupplier):
         if browser_cookies:
             self.cookies_from_browser(browser_cookies, "mouser.com")
 
-        return True
-
-    def search(self, search_term):
+    def search(self, search_term: str) -> tuple[list[ApiPart], int]:
         search_request = MouserPartSearchRequest("partnumber")
-        for retry in retry_timeouts():
-            with retry:
-                search_request.part_search(search_term)
+        search_request.part_search(search_term)
 
-        response = search_request.get_response()
+        response = cast(str | dict[str, Any], search_request.get_response())
         if not isinstance(response, dict):
-            return [], 0
+            self.error("Failed to decode JSON")
+
         if not ((results := response.get("SearchResults")) and (parts := results.get("Parts"))):
             return [], 0
 
@@ -58,13 +57,15 @@ class Mouser(ScrapeSupplier):
 
         search_term_lower = search_term.lower()
         filtered_matches = [
-            part for part in valid_parts
+            part
+            for part in valid_parts
             if part.get("MouserPartNumber", "").lower().startswith(search_term_lower)
             or part.get("ManufacturerPartNumber", "").lower().startswith(search_term_lower)
         ]
 
         exact_matches = [
-            part for part in filtered_matches
+            part
+            for part in filtered_matches
             if part.get("MouserPartNumber", "").lower() == search_term_lower
             or part.get("ManufacturerPartNumber", "").lower() == search_term_lower
         ]
@@ -73,16 +74,15 @@ class Mouser(ScrapeSupplier):
 
         return list(map(self.get_api_part, filtered_matches)), len(filtered_matches)
 
-    def get_api_part(self, mouser_part):
-        mouser_part_number = mouser_part.get("MouserPartNumber")
-
+    def get_api_part(self, mouser_part: dict[str, Any]):
         supplier_link = DOMAIN_REGEX.sub(
-            DOMAIN_SUB.format(self.locale_url), mouser_part.get("ProductDetailUrl"))
+            DOMAIN_SUB.format(self.locale_url), mouser_part.get("ProductDetailUrl", "")
+        )
 
         category = mouser_part.get("Category")
         incomplete_category_path = [category] if category else []
 
-        parameters = {}
+        parameters: dict[str, Any] = {}
         for attribute in mouser_part.get("ProductAttributes", []):
             name = attribute.get("AttributeName")
             value = attribute.get("AttributeValue")
@@ -110,7 +110,7 @@ class Mouser(ScrapeSupplier):
             image_url=mouser_part.get("ImagePath"),
             datasheet_url=mouser_part.get("DataSheetUrl"),
             supplier_link=supplier_link,
-            SKU=mouser_part_number,
+            SKU=mouser_part["MouserPartNumber"],
             manufacturer=mouser_part.get("Manufacturer", ""),
             manufacturer_link="",
             MPN=mouser_part.get("ManufacturerPartNumber", ""),
@@ -139,10 +139,12 @@ class Mouser(ScrapeSupplier):
         soup = BeautifulSoup(result.content, "html.parser")
 
         if specs_table := soup.find("table", class_="specs-table"):
-            api_part.parameters.update(dict(
-                tuple(map(lambda column: column.text.strip().strip(":"), row.find_all("td")[:2]))
-                for row in specs_table.find_all("tr")[1:]
-            ))
+            api_part.parameters.update(
+                dict(
+                    tuple((column.text.strip().strip(":") for column in row.find_all("td")[:2]))
+                    for row in specs_table.find_all("tr")[1:]
+                )
+            )
         else:
             warning(f"failed to get parameters from '{url}' (might be blocked)")
             return True
@@ -154,3 +156,15 @@ class Mouser(ScrapeSupplier):
             return True
 
         return True
+
+
+class MouserPartSearchRequest(_MouserPartSearchRequest):
+    def __init__(self, operation: str, file_keys: str | None = None, *args: Any):
+        self.session = retries.setup_session()
+        super().__init__(operation, file_keys, *args)
+
+    def get(self, url: str):
+        return self.session.get(url)
+
+    def post(self, url: str, body: Any):
+        return self.session.post(url, json=body)

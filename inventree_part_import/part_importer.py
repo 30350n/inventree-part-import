@@ -1,24 +1,37 @@
-import json, re, traceback
+import json
+import re
+import traceback
 from enum import Enum
-from multiprocessing.pool import ThreadPool
-from string import Formatter, _string
+from multiprocessing.pool import AsyncResult, ThreadPool
+from string import Formatter
+from typing import Any, Mapping, Self, Sequence, cast
 
 from cutie import select
 from error_helper import BOLD, BOLD_END, error, hint, info, prompt, prompt_input, success, warning
-from inventree.base import Parameter
+from inventree.api import InvenTreeAPI
+from inventree.base import Parameter, ParameterTemplate
 from inventree.company import Company, ManufacturerPart, SupplierPart, SupplierPriceBreak
 from inventree.part import Part
 from requests.compat import quote
 from requests.exceptions import HTTPError
 from thefuzz import fuzz
 
-from .categories import setup_categories_and_parameters
+from .categories import Category, setup_categories_and_parameters
 from .config import CATEGORIES_CONFIG, CONFIG, get_config, get_pre_creation_hooks
-from .inventree_helpers import (create_manufacturer, get_manufacturer_part,
-                                get_parameter_templates, get_part, get_supplier_part,
-                                update_object_data, upload_datasheet, upload_image)
+from .exceptions import InvenTreeObjectCreationError
+from .inventree_helpers import (
+    create_manufacturer,
+    get_manufacturer_part,
+    get_parameter_templates,
+    get_part,
+    get_supplier_part,
+    update_object_data,
+    upload_datasheet,
+    upload_image,
+)
 from .suppliers import search
 from .suppliers.base import ApiPart
+
 
 class ImportResult(Enum):
     ERROR = 0
@@ -26,15 +39,17 @@ class ImportResult(Enum):
     INCOMPLETE = 2
     SUCCESS = 3
 
-    def __or__(self, other):
+    def __or__(self, other: Self):
         return self if self.value < other.value else other
 
+
 class PartImporter:
-    def __init__(self, inventree_api, interactive=False, verbose=False):
+    def __init__(
+        self, inventree_api: InvenTreeAPI, interactive: bool = False, verbose: bool = False
+    ):
         self.api = inventree_api
         self.interactive = interactive
         self.verbose = verbose
-        self.dry_run = hasattr(inventree_api, "DRY_RUN")
 
         # preload pre_creation_hooks
         get_pre_creation_hooks()
@@ -42,24 +57,26 @@ class PartImporter:
         self.category_map, self.parameter_map = setup_categories_and_parameters(self.api)
         self.parameter_templates = get_parameter_templates(self.api)
 
-        self.part_category_to_category = {
-            category.part_category.pk: category
+        self.part_category_to_category: dict[int, Category] = {
+            cast(int, category.part_category.pk): category
             for category in self.category_map.values()
         }
         self.categories = set(self.category_map.values())
 
     def import_part(
-            self,
-            search_term,
-            existing_part: Part = None,
-            supplier_id=None,
-            only_supplier=False
-        ):
+        self,
+        search_term: str,
+        existing_part: Part | None = None,
+        supplier_id: str | None = None,
+        only_supplier: bool = False,
+    ):
         info(f"searching for {search_term} ...", end="\n")
         import_result = ImportResult.SUCCESS
 
         self.existing_manufacturer_part = None
-        search_results = search(search_term, supplier_id, only_supplier)
+        if (search_results := search(search_term, supplier_id, only_supplier)) is None:
+            return ImportResult.ERROR
+
         for supplier, async_results in search_results:
             info(f"searching at {supplier.name} ...")
             results, result_count = async_results.get()
@@ -72,7 +89,7 @@ class PartImporter:
                 api_part = results[0]
             elif self.interactive:
                 prompt(f"found multiple parts at {supplier.name}, select which one to import")
-                results = results[:get_config()["interactive_part_matches"]]
+                results = results[: get_config()["interactive_part_matches"]]
                 if result_count > len(results):
                     hint(f"found {result_count} results, only showing the first {len(results)}")
                 if not (api_part := self.select_api_part(results)):
@@ -89,11 +106,15 @@ class PartImporter:
                 import_result = ImportResult.ERROR
 
                 error_str = "'unknown HTTPError'"
-                if e.args and isinstance(e.args[0], dict) and (body := e.args[0].get("body")):
+                if (
+                    e.args
+                    and isinstance(arg0 := e.args[0], dict)
+                    and (body := cast(dict[str, Any], arg0).get("body"))
+                ):
                     try:
-                        error_str = "\n" + "\n".join((
-                            f"    {key}: {value}\n" for key, value in json.loads(body).items()
-                        ))
+                        error_str = "\n" + "\n".join(
+                            (f"    {key}: {value}" for key, value in json.loads(body).items())
+                        )
                     except json.JSONDecodeError:
                         pass
                 error(f"failed to import part with: {error_str}")
@@ -114,12 +135,15 @@ class PartImporter:
 
     @staticmethod
     def select_api_part(api_parts: list[ApiPart]):
-        format_str = str(get_config().get(
-            "part_selection_format", "{MPN} | {manufacturer} | {SKU} | {supplier_link}"
-        ))
+        format_str = str(
+            get_config().get(
+                "part_selection_format", "{MPN} | {manufacturer} | {SKU} | {supplier_link}"
+            )
+        )
         fields = [
-            parsed[1] for parsed in Formatter().parse(format_str)
-            if GET_FORMATSTR_FIELD.sub("", parsed[1]) in ApiPart.__dataclass_fields__
+            parsed[1]
+            for parsed in Formatter().parse(format_str)
+            if parsed[1] and GET_FORMATSTR_FIELD.sub("", parsed[1]) in ApiPart.__dataclass_fields__
         ]
 
         formatter = SafeFormatter()
@@ -143,7 +167,7 @@ class PartImporter:
         index = select(choices, deselected_prefix="  ", selected_prefix="> ")
         return [*api_parts, None][index]
 
-    def import_supplier_part(self, supplier: Company, api_part: ApiPart, part: Part = None):
+    def import_supplier_part(self, supplier: Company, api_part: ApiPart, part: Part | None = None):
         import_result = ImportResult.SUCCESS
 
         if supplier_part := get_supplier_part(self.api, supplier, api_part.SKU):
@@ -169,32 +193,31 @@ class PartImporter:
             not self.existing_manufacturer_part
             or self.existing_manufacturer_part.pk != manufacturer_part.pk
         )
-        if not self.dry_run:
-            if not part:
-                part = Part(self.api, manufacturer_part.part)
-            elif part.pk != manufacturer_part.part:
-                update_object_data(manufacturer_part, {"part": part.pk})
+        if not part:
+            part = Part(self.api, manufacturer_part.part)
+        elif part.pk != manufacturer_part.part:
+            update_object_data(manufacturer_part, {"part": part.pk})
 
-            if update_part:
-                if not api_part.finalize():
-                    return ImportResult.FAILURE
-                update_object_data(part, api_part.get_part_data(), f"part {api_part.MPN}")
+        if update_part:
+            if not api_part.finalize():
+                return ImportResult.FAILURE
+            update_object_data(part, api_part.get_part_data(), f"part {api_part.MPN}")
 
-            if not part.image and api_part.image_url:
-                upload_image(part, api_part.image_url)
+        if not part.image and api_part.image_url:
+            upload_image(part, api_part.image_url)
 
-            attachment_types = {attachment.comment for attachment in part.getAttachments()}
-            if "datasheet" not in attachment_types and api_part.datasheet_url:
-                match get_config().get("datasheets"):
-                    case "upload":
-                        upload_datasheet(part, api_part.datasheet_url)
-                    case "link":
-                        datasheet_url_safe = quote(api_part.datasheet_url, safe=":/")
-                        part.addLinkAttachment(datasheet_url_safe[:200], comment="datasheet")
-                    case None | False:
-                        pass
-                    case invalid_mode:
-                        warning(f"invalid value 'datasheets: {invalid_mode}' in {CONFIG}")
+        attachment_types = {attachment.comment for attachment in part.getAttachments()}
+        if "datasheet" not in attachment_types and api_part.datasheet_url:
+            match get_config().get("datasheets"):
+                case "upload":
+                    upload_datasheet(part, api_part.datasheet_url)
+                case "link":
+                    datasheet_url_safe = quote(api_part.datasheet_url, safe=":/")
+                    part.addLinkAttachment(datasheet_url_safe[:200], comment="datasheet")
+                case None | False:
+                    pass
+                case invalid_mode:
+                    warning(f"invalid value 'datasheets: {invalid_mode}' in {CONFIG}")
 
         if api_part.parameters:
             result = self.setup_parameters(part, api_part, update_part)
@@ -203,7 +226,7 @@ class PartImporter:
         self.existing_manufacturer_part = manufacturer_part
 
         supplier_part_data = {
-            "part": 0 if self.dry_run else part.pk,
+            "part": part.pk,
             "manufacturer_part": manufacturer_part.pk,
             "supplier": supplier.pk,
             "SKU": api_part.SKU,
@@ -215,6 +238,8 @@ class PartImporter:
         else:
             action_str = "added"
             supplier_part = SupplierPart.create(self.api, supplier_part_data)
+            if supplier_part is None:
+                raise InvenTreeObjectCreationError(SupplierPart)
 
         self.setup_price_breaks(supplier_part, api_part)
 
@@ -225,8 +250,8 @@ class PartImporter:
     def create_manufacturer_part(
         self,
         api_part: ApiPart,
-        part: Part = None,
-    ) -> tuple[ManufacturerPart, Part]:
+        part: Part | None = None,
+    ):
         part_data = api_part.get_part_data()
         if part or (part := get_part(self.api, api_part.MPN)):
             update_object_data(part, part_data, f"part {api_part.MPN}")
@@ -249,35 +274,43 @@ class PartImporter:
 
             info(f"creating part {api_part.MPN} in '{category.part_category.pathstring}' ...")
             part = Part.create(self.api, {"category": category.part_category.pk, **part_data})
+            if part is None:
+                raise InvenTreeObjectCreationError(Part)
 
         manufacturer = create_manufacturer(self.api, api_part.manufacturer)
         info(f"creating manufacturer part {api_part.MPN} ...")
-        manufacturer_part = ManufacturerPart.create(self.api, {
-            "part": part.pk,
-            "manufacturer": manufacturer.pk,
-            **api_part.get_manufacturer_part_data(),
-        })
+        manufacturer_part = ManufacturerPart.create(
+            self.api,
+            {
+                "part": part.pk,
+                "manufacturer": manufacturer.pk,
+                **api_part.get_manufacturer_part_data(),
+            },
+        )
+        if manufacturer_part is None:
+            raise InvenTreeObjectCreationError(ManufacturerPart)
 
         return manufacturer_part, part
 
-    def select_category(self, category_path):
+    def select_category(self, category_path: list[str]):
         search_terms = [category_path[-1], " ".join(category_path[-2:])]
 
-        def rate_category(category):
+        def rate_category(category: Category):
             return max(
                 fuzz.ratio(term, name)
                 for name in (category.name, " ".join(category.path[-2:]))
                 for term in search_terms
             )
+
         category_matches = sorted(self.categories, key=rate_category, reverse=True)
 
         max_matches = int(get_config().get("interactive_category_matches", 5))
         N_MATCHES = min(max_matches, len(category_matches))
-        choices = (
+        choices = [
             *(" / ".join(category.path) for category in category_matches[:N_MATCHES]),
             f"{BOLD}Enter Manually ...{BOLD_END}",
-            f"{BOLD}Skip ...{BOLD_END}"
-        )
+            f"{BOLD}Skip ...{BOLD_END}",
+        ]
         while True:
             index = select(choices, deselected_prefix="  ", selected_prefix="> ")
             if index == N_MATCHES + 1:
@@ -291,8 +324,8 @@ class PartImporter:
             warning(f"category '{name}' does not exist")
             prompt("select category")
 
-    def setup_price_breaks(self, supplier_part, api_part: ApiPart):
-        price_breaks = {
+    def setup_price_breaks(self, supplier_part: SupplierPart, api_part: ApiPart):
+        price_breaks: dict[int | float, SupplierPriceBreak] = {
             price_break.quantity: price_break
             for price_break in SupplierPriceBreak.list(self.api, part=supplier_part.pk)
         }
@@ -305,22 +338,22 @@ class PartImporter:
                 price_break.save({"price": price, "price_currency": api_part.currency})
                 updated_pricing = True
             else:
-                SupplierPriceBreak.create(self.api, {
-                    "part": supplier_part.pk,
-                    "quantity": quantity,
-                    "price": price,
-                    "price_currency": api_part.currency,
-                })
+                SupplierPriceBreak.create(
+                    self.api,
+                    {
+                        "part": supplier_part.pk,
+                        "quantity": quantity,
+                        "price": price,
+                        "price_currency": api_part.currency,
+                    },
+                )
                 updated_pricing = True
 
         if updated_pricing:
             info("updating price breaks ...")
 
-    def setup_parameters(self, part, api_part: ApiPart, update_existing=True):
+    def setup_parameters(self, part: Part, api_part: ApiPart, update_existing: bool = True):
         import_result = ImportResult.SUCCESS
-
-        if self.dry_run and not part:
-            return import_result
 
         if not (category := self.part_category_to_category.get(part.category)):
             name = part.getCategory().pathstring
@@ -332,7 +365,7 @@ class PartImporter:
             for parameter in Parameter.list(self.api, part=part.pk)
         }
 
-        matched_parameters = {}
+        matched_parameters: dict[str, str] = {}
         for api_part_parameter, value in api_part.parameters.items():
             for parameter in self.parameter_map.get(api_part_parameter.lower(), []):
                 name = parameter.name
@@ -340,16 +373,16 @@ class PartImporter:
                     matched_parameters[name] = value
 
         already_set_parameters = {
-            name for name, parameter in existing_parameters.items() if parameter.data}
+            name for name, parameter in existing_parameters.items() if parameter.data
+        }
         unassigned_parameters = (
-            set(category.parameters) - set(matched_parameters) - already_set_parameters)
+            set(category.parameters) - set(matched_parameters) - already_set_parameters
+        )
 
         if unassigned_parameters and self.interactive:
             prompt(f"failed to match some parameters from '{api_part.supplier_link}'", end="\n")
             for parameter_name in unassigned_parameters.copy():
-                prompt(
-                    f"failed to match value for parameter '{parameter_name}', select parameter"
-                )
+                prompt(f"failed to match value for parameter '{parameter_name}', select parameter")
                 alias, value = self.select_parameter(parameter_name, api_part.parameters)
                 if value is None:
                     continue
@@ -372,22 +405,24 @@ class PartImporter:
                     self.parameter_map[alias.lower()] = [parameter]
 
         thread_pool = ThreadPool(4)
-        async_results = []
+        async_results: list[AsyncResult[str | None]] = []
         for name, value in matched_parameters.items():
             if not (value := sanitize_parameter_value(value)):
                 continue
 
             if existing_parameter := existing_parameters.get(name):
                 if update_existing and existing_parameter.data != value:
-                    async_results.append(thread_pool.apply_async(
-                        update_parameter, (existing_parameter, value)
-                    ))
+                    async_results.append(
+                        thread_pool.apply_async(update_parameter, (existing_parameter, value))
+                    )
             else:
                 if parameter_template := self.parameter_templates.get(name):
-                    async_results.append(thread_pool.apply_async(
-                        create_parameter, (self.api, part, parameter_template, value)
-                    ))
-                elif not self.dry_run:
+                    async_results.append(
+                        thread_pool.apply_async(
+                            create_parameter, (self.api, part, parameter_template, value)
+                        )
+                    )
+                else:
                     warning(f"failed to find template parameter for '{name}'")
                     import_result |= ImportResult.INCOMPLETE
 
@@ -410,13 +445,13 @@ class PartImporter:
         return import_result
 
     @staticmethod
-    def select_parameter(parameter_name, parameters) -> tuple[str, str]:
+    def select_parameter(parameter_name: str, parameters: dict[str, Any]) -> tuple[str | None, Any]:
         max_matches = int(get_config().get("interactive_parameter_matches", 5))
         N_MATCHES = min(max_matches, len(parameters))
         parameter_matches_items = sorted(
             parameters.items(),
             key=lambda item: max(fuzz.partial_ratio(parameter_name, term) for term in item),
-            reverse=True
+            reverse=True,
         )
         parameter_matches = dict(parameter_matches_items[:N_MATCHES])
 
@@ -424,12 +459,12 @@ class PartImporter:
         values = [str(value).ljust(max_value_length) for value in parameter_matches.values()]
         names = list(parameter_matches.keys())
 
-        choices = (
+        choices = [
             *(f"{value} | {BOLD}{name}{BOLD_END}" for value, name in zip(values, names)),
             f"{BOLD}Match Parameter Manually ...{BOLD_END}",
             f"{BOLD}Enter Value Manually ...{BOLD_END}",
-            f"{BOLD}Skip ...{BOLD_END}"
-        )
+            f"{BOLD}Skip ...{BOLD_END}",
+        ]
         while True:
             index = select(choices, deselected_prefix="  ", selected_prefix="> ")
             if index == N_MATCHES + 1:
@@ -440,23 +475,25 @@ class PartImporter:
                 return parameter_matches_items[index]
 
             name = prompt_input("parameter name")
-            if (parameter_value := parameters.get(name)):
+            if parameter_value := parameters.get(name):
                 return (name, parameter_value)
             warning(f"parameter '{name}' is not defined by the supplier")
             prompt("select parameter")
 
-def create_parameter(inventree_api, part, parameter_template, value):
+
+def create_parameter(
+    inventree_api: InvenTreeAPI, part: Part, parameter_template: ParameterTemplate, value: Any
+):
     try:
-        Parameter.create(inventree_api, {
-            "part": part.pk,
-            "template": parameter_template.pk,
-            "data": value,
-        })
+        Parameter.create(
+            inventree_api, {"part": part.pk, "template": parameter_template.pk, "data": value}
+        )
     except HTTPError as e:
         msg = e.args[0]["body"]
         return f"failed to create parameter '{parameter_template.name}' with '{msg}'"
 
-def update_parameter(parameter, value):
+
+def update_parameter(parameter: Parameter, value: Any):
     try:
         parameter.save({"data": value})
     except HTTPError as e:
@@ -464,7 +501,9 @@ def update_parameter(parameter, value):
         parameter_name = parameter.template_detail["name"]
         return f"failed to update parameter '{parameter_name}' to '{value}' with '{msg}'"
 
+
 SANITIZE_PARAMETER = re.compile("±")
+
 
 def sanitize_parameter_value(value: str) -> str:
     value = value.strip()
@@ -474,13 +513,17 @@ def sanitize_parameter_value(value: str) -> str:
     value = value.replace("Ohm", "ohm").replace("ohms", "ohm")
     return value
 
+
 class SafeFormatter(Formatter):
-    def get_field(self, field_name, args, kwargs):
-        first, _ = _string.formatter_field_name_split(field_name)
+    def get_field(self, field_name: str, args: Sequence[Any], kwargs: Mapping[str, Any]):
+        import _string  # pyright: ignore[reportMissingImports]
+
+        first, _ = cast(tuple[str, str], _string.formatter_field_name_split(field_name))  # pyright: ignore[reportUnknownMemberType]
         try:
             return super().get_field(field_name, args, kwargs)
         except (KeyError, TypeError):
             return "", first
+
 
 GET_FORMATSTR_FIELD = re.compile(r"[\[.].*$")
 SIMPLIFY_FORMATSTR = re.compile(r"([^{]{[^[.}]*)[^}]*(})")

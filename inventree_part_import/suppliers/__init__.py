@@ -1,28 +1,36 @@
 import importlib
-from error_helper import error, hint
 from inspect import isclass
 from multiprocessing.pool import ThreadPool
 from pathlib import Path
+from typing import Any
+
+from error_helper import error, hint
+from inventree.api import InvenTreeAPI
+from inventree.company import Company as InvenTreeCompany
 
 from ..config import SUPPLIERS_CONFIG, get_config, load_suppliers_config, update_config_file
 from ..inventree_helpers import Company
 from .base import ScrapeSupplier, Supplier
 
-_SUPPLIERS = None
-def search(search_term, supplier_id: str = None, only_supplier=False):
-    global _SUPPLIERS
-    if _SUPPLIERS is None:
-        assert _SUPPLIER_COMPANIES is not None, "call setup_supplier_companies(...) first"
-        supplier_objects, _ = get_suppliers()
-        assert supplier_objects.keys() == _SUPPLIER_COMPANIES.keys()
-        _SUPPLIERS = dict(zip(
-            supplier_objects.keys(),
-            zip(supplier_objects.values(), _SUPPLIER_COMPANIES.values())
-        ))
+_suppliers = None
 
-    suppliers = list(_SUPPLIERS.values())
+
+def search(search_term: str, supplier_id: str | None = None, only_supplier: bool = False):
+    global _suppliers
+    if _suppliers is None:
+        assert _supplier_companies is not None, "call setup_supplier_companies(...) first"
+        supplier_objects, _ = get_suppliers()
+        assert supplier_objects.keys() == _supplier_companies.keys()
+        _suppliers = dict(
+            zip(
+                supplier_objects.keys(),
+                zip(supplier_objects.values(), _supplier_companies.values()),
+            )
+        )
+
+    suppliers = list(_suppliers.values())
     if supplier_id:
-        if supplier := _SUPPLIERS.get(supplier_id):
+        if supplier := _suppliers.get(supplier_id):
             if only_supplier:
                 suppliers = [supplier]
             else:
@@ -38,14 +46,19 @@ def search(search_term, supplier_id: str = None, only_supplier=False):
         for supplier_object, api_company in suppliers
     )
 
-_SUPPLIER_COMPANIES = None
-def setup_supplier_companies(inventree_api):
-    global _SUPPLIER_COMPANIES
-    _SUPPLIER_COMPANIES = {}
+
+_supplier_companies: dict[str, InvenTreeCompany] | None = None
+
+
+def setup_supplier_companies(inventree_api: InvenTreeAPI):
+    global _supplier_companies
+    _supplier_companies = {}
     global_config = get_config()
+
     with update_config_file(SUPPLIERS_CONFIG) as suppliers_config:
-        for id, supplier_object in _SUPPLIER_OBJECTS.items():
-            supplier_config = suppliers_config.get(id)
+        assert _supplier_objects is not None
+        for id, supplier_object in _supplier_objects.items():
+            supplier_config: dict[str, Any] | None = suppliers_config.get(id)
             if supplier_config is None:
                 supplier_config = suppliers_config[id] = {}
             api_company = Company(
@@ -56,17 +69,20 @@ def setup_supplier_companies(inventree_api):
             ).setup(inventree_api)
             if not hasattr(inventree_api, "DRY_RUN"):
                 supplier_config["_primary_key"] = api_company.pk
-            _SUPPLIER_COMPANIES[id] = api_company
+            _supplier_companies[id] = api_company
 
-_SUPPLIER_OBJECTS = None
-_AVAILABLE_SUPPLIER_OBJECTS = None
-def get_suppliers(reload=False, setup=True) -> tuple[dict, dict]:
-    global _SUPPLIER_OBJECTS, _AVAILABLE_SUPPLIER_OBJECTS
-    if not reload and _SUPPLIER_OBJECTS is not None:
-        return _SUPPLIER_OBJECTS, _AVAILABLE_SUPPLIER_OBJECTS
 
-    _SUPPLIER_OBJECTS = {}
-    _AVAILABLE_SUPPLIER_OBJECTS = {}
+_supplier_objects: dict[str, Supplier] | None = None
+_available_supplier_objects: dict[str, Supplier] | None = None
+
+
+def get_suppliers(reload: bool = False, setup: bool = True):
+    global _supplier_objects, _available_supplier_objects
+    if not reload and _supplier_objects is not None and _available_supplier_objects is not None:
+        return _supplier_objects, _available_supplier_objects
+
+    _supplier_objects = {}
+    _available_supplier_objects = {}
     for path in Path(__file__).parent.glob("supplier_*.py"):
         module_name = path.stem
         try:
@@ -79,7 +95,8 @@ def get_suppliers(reload=False, setup=True) -> tuple[dict, dict]:
             continue
 
         supplier_classes = [
-            cls for cls in vars(module).values()
+            cls
+            for cls in vars(module).values()
             if isclass(cls) and cls not in (Supplier, ScrapeSupplier) and issubclass(cls, Supplier)
         ]
         if len(supplier_classes) != 1:
@@ -87,22 +104,24 @@ def get_suppliers(reload=False, setup=True) -> tuple[dict, dict]:
             error(f"failed to load supplier module '{module_name}' ({suffix} defined)")
             continue
 
-        if supplier_classes[0].SUPPORT_LEVEL is None:
+        if not hasattr(supplier_classes[0], "SUPPORT_LEVEL"):
             error(f"failed to load supplier module '{module_name}' (undefined SUPPORT_LEVEL)")
             continue
 
         id = module_name.split("supplier_", 1)[-1]
-        _AVAILABLE_SUPPLIER_OBJECTS[id] = supplier_classes[0]()
+        _available_supplier_objects[id] = supplier_classes[0]()
 
-    _AVAILABLE_SUPPLIER_OBJECTS = dict(sorted(
-        _AVAILABLE_SUPPLIER_OBJECTS.items(),
-        key=lambda supplier_item: (supplier_item[1].SUPPORT_LEVEL, supplier_item[1].name),
-    ))
+    _available_supplier_objects = dict(
+        sorted(
+            _available_supplier_objects.items(),
+            key=lambda supplier_item: (supplier_item[1].SUPPORT_LEVEL, supplier_item[1].name),
+        )
+    )
 
-    _SUPPLIER_OBJECTS = load_suppliers_config(_AVAILABLE_SUPPLIER_OBJECTS, setup=setup)
+    _supplier_objects = load_suppliers_config(_available_supplier_objects, setup=setup)
 
-    if (available := len(_AVAILABLE_SUPPLIER_OBJECTS)) > (loaded := len(_SUPPLIER_OBJECTS)):
+    if (available := len(_available_supplier_objects)) > (loaded := len(_supplier_objects)):
         if setup:
             hint(f"only {loaded} of {available} available supplier modules are configured")
 
-    return _SUPPLIER_OBJECTS, _AVAILABLE_SUPPLIER_OBJECTS
+    return _supplier_objects, _available_supplier_objects
