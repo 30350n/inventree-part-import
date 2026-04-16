@@ -1,6 +1,8 @@
+import sys
 from dataclasses import dataclass, field
 
-from error_helper import info, success, warning
+from cutie import prompt_yes_or_no
+from error_helper import hint, info, success, warning
 from inventree.base import ParameterTemplate
 from inventree.part import PartCategory, PartCategoryParameterTemplate
 
@@ -98,11 +100,16 @@ def setup_categories_and_parameters(inventree_api):
                 "units": parameter.units,
             })
 
-    category_parameters = {
-        (category, param) for category in categories.values() for param in category.parameters
-    }
     part_category_pk_to_category = {
         category.part_category.pk: category for category in categories.values()
+    }
+
+    # https://github.com/inventree/InvenTree/pull/10699
+    if inventree_api.api_version >= 429:
+        migrate_parameter_templates(inventree_api, part_category_pk_to_category)
+
+    category_parameters = {
+        (category, param) for category in categories.values() for param in category.parameters
     }
     part_category_parameter_templates = {
         (category, template.template_detail["name"])
@@ -153,6 +160,39 @@ def setup_categories_and_parameters(inventree_api):
     success("setup categories!", end="\n\n")
 
     return category_map, parameter_map
+
+def migrate_parameter_templates(inventree_api, part_category_pk_to_category):
+    category_templates = {}
+    for template in PartCategoryParameterTemplate.list(inventree_api):
+        if category := part_category_pk_to_category.get(template.category):
+            category_templates.setdefault(category, {})[template.template] = template
+
+    inherited_category_templates = [
+        template
+        for category, templates in category_templates.items()
+        for base_template_pk, template in templates.items()
+        if (parent_category := part_category_pk_to_category.get(category.part_category.parent))
+        if base_template_pk in category_templates.get(parent_category, [])
+    ]
+
+    if inherited_category_templates:
+        warning(
+            f"found {len(inherited_category_templates)} invalid PartCategoryParameterTemplates "
+            "which will have to be DELETED to continue operation",
+        )
+        hint(
+            "visit https://github.com/30350n/inventree-part-import/pull/92#issuecomment-4268494064 "
+            "to learn more"
+        )
+        result = prompt_yes_or_no(
+            f"delete {len(inherited_category_templates)} invalid PartCategoryParameterTemplates?",
+            default_is_yes=True,
+        )
+        if result:
+            for template in inherited_category_templates:
+                template.delete()
+        else:
+            sys.exit(0)
 
 @dataclass
 class Category:
