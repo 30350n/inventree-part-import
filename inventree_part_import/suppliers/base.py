@@ -7,13 +7,12 @@ from http.cookiejar import CookieJar
 from typing import Any, Callable, Literal, cast
 
 import browser_cookie3
-from error_helper import error, warning
+from error_helper import warning
 from fake_useragent import UserAgent
 from requests import Response, Session
 
-from inventree_part_import.exceptions import SupplierError, SupplierLoadError
-
 from ..config import get_config, get_pre_creation_hooks
+from ..exceptions import SupplierError, SupplierLoadError
 from ..retries import setup_session
 
 
@@ -122,7 +121,6 @@ class Supplier:
 
     def load_error(self, message: str):
         raise SupplierLoadError(self.__class__.__name__, message)
-        error(f"failed to load '{self.name}' supplier module ({message})")  # TODO
 
     def error(self, message: str):
         raise SupplierError(self.__class__.__name__, message)

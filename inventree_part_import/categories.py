@@ -8,8 +8,6 @@ from inventree.api import InvenTreeAPI
 from inventree.base import ParameterTemplate
 from inventree.part import PartCategory, PartCategoryParameterTemplate
 
-from inventree_part_import.exceptions import InvenTreeObjectCreationError
-
 from .config import (
     CATEGORIES_CONFIG,
     PARAMETERS_CONFIG,
@@ -17,6 +15,7 @@ from .config import (
     get_parameters_config,
     update_config_file,
 )
+from .exceptions import InvenTreeObjectCreationError
 
 
 def setup_categories_and_parameters(inventree_api: InvenTreeAPI):

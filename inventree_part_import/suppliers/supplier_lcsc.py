@@ -5,9 +5,8 @@ from fake_useragent import UserAgent
 from requests.compat import quote
 from requests.exceptions import JSONDecodeError
 
-from inventree_part_import.exceptions import SupplierError
-
 from .. import retries
+from ..exceptions import SupplierError
 from .base import REMOVE_HTML_TAGS, ApiPart, Supplier, SupplierSupportLevel
 
 

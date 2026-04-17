@@ -24,6 +24,7 @@ from .config import (
     update_config_file,
     update_supplier_config,
 )
+from .exceptions import InvenTreeObjectCreationError
 from .inventree_helpers import get_category, get_category_parts
 from .part_importer import ImportResult, PartImporter
 from .suppliers import get_suppliers, setup_supplier_companies
@@ -51,6 +52,8 @@ def handle_errors(func: Callable[P, None]) -> Callable[P, None]:
                 error(f"HTTP error ({e})", prefix="FATAL: ")
             else:
                 raise e
+        except InvenTreeObjectCreationError as e:
+            error(e, prefix="FATAL: ")
 
     return wrapper
 

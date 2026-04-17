@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from ..suppliers.base import ApiPart, Supplier
 
 from .. import __package__ as parent_package
+from ..exceptions import SupplierLoadError
 from ..localization import currencies, get_country, get_language
 from ..retries import RetryInvenTreeAPI
 
@@ -343,6 +344,9 @@ def load_suppliers_config(suppliers: dict[str, Supplier], setup: bool = True):
         except MarkedYAMLError as e:
             error(e, prefix="")
             sys.exit(1)
+        except SupplierLoadError as e:
+            error(e)
+            sys.exit(1)
 
         return suppliers_out
 
@@ -366,8 +370,11 @@ def load_suppliers_config(suppliers: dict[str, Supplier], setup: bool = True):
 
         supplier_ids = list(suppliers.keys())
         for id in (supplier_ids[index] for index in selection):
-            new_suppliers_config_data[id] = update_supplier_config(suppliers[id], {})
-            suppliers_out[id] = suppliers[id]
+            try:
+                new_suppliers_config_data[id] = update_supplier_config(suppliers[id], {})
+                suppliers_out[id] = suppliers[id]
+            except SupplierLoadError as e:
+                error(e)
 
     yaml_data = yaml_dump(new_suppliers_config_data, sort_keys=False)
     suppliers_config.write_text(yaml_data, encoding="utf-8")
