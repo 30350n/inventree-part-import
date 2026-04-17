@@ -279,20 +279,20 @@ wheels = [
 
 [[package]]
 name = "inventree"
-version = "0.19.0"
+version = "0.23.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "requests" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3c/2a/066e25cab2dd154fae75bbc71f45477746403b8f259a2a21ad74c1c8a196/inventree-0.19.0.tar.gz", hash = "sha256:6409bc51fb05a8d491a5cc030f486c4040c82cefbc21ffbd5231fcf8cd34b404", size = 45502, upload-time = "2025-09-03T05:22:22.651Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ff/1c/41c1bd8c7fc7a059f3bfb7e90b9dee626f513cf0d118cad1cadba74cd0dc/inventree-0.23.1.tar.gz", hash = "sha256:42a451d88ba94e984f791d64d26859297d29142e4f068382366e95fcce5335a2", size = 47326, upload-time = "2026-03-02T12:15:02.378Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/80/0c/02ebbdcc93fc2e71483fb7a88a8fc8709a470823384d5ccce56652217c0f/inventree-0.19.0-py3-none-any.whl", hash = "sha256:91637bc5cebe5a5d9a71ede46b717bd217669032939ab258b9e18266cfc1e19b", size = 31758, upload-time = "2025-09-03T05:22:21.447Z" },
+    { url = "https://files.pythonhosted.org/packages/79/b2/93d6c5167f69f1c67fd76779a2145835af7fd89187821b5f018502576882/inventree-0.23.1-py3-none-any.whl", hash = "sha256:2b1d26ab48356856da05a13ec0d314c2dfc85e50eb73acd9e8c761b6af6837d5", size = 33289, upload-time = "2026-03-02T12:15:01.162Z" },
 ]
 
 [[package]]
 name = "inventree-part-import"
-version = "1.9.0"
+version = "1.9.2"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
@@ -328,7 +328,7 @@ requires-dist = [
     { name = "cutie" },
     { name = "error-helper" },
     { name = "fake-useragent" },
-    { name = "inventree", specifier = ">=0.13.2,<0.20.0" },
+    { name = "inventree", specifier = ">=0.20" },
     { name = "isocodes" },
     { name = "mouser", specifier = ">=0.1.5" },
     { name = "platformdirs", specifier = ">=3.2.0" },
