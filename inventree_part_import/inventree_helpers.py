@@ -105,18 +105,16 @@ def create_manufacturer(inventree_api: InvenTreeAPI, name: str):
     assert len(manufacturers) == 0
 
     info(f"creating manufacturer '{name}' ...")
-    manufacturer = InvenTreeCompany.create(
-        inventree_api,
-        {
-            "name": name,
-            "description": name,
-            "is_manufacturer": True,
-            "is_supplier": False,
-            "is_customer": False,
-        },
-    )
-    if manufacturer is None:
+    manufacturer_data = {
+        "name": name,
+        "description": name,
+        "is_manufacturer": True,
+        "is_supplier": False,
+        "is_customer": False,
+    }
+    if not (manufacturer := InvenTreeCompany.create(inventree_api, manufacturer_data)):
         raise InvenTreeObjectCreationError(InvenTreeCompany)
+
     return manufacturer
 
 
@@ -227,16 +225,14 @@ class Company:
             return api_company
 
         info(f"creating supplier '{self.name}' ...")
-        api_company = InvenTreeCompany.create(
-            inventree_api,
-            {
-                "name": self.name,
-                "currency": self.currency,
-                "is_supplier": self.is_supplier,
-                "is_manufacturer": self.is_manufacturer,
-                "is_customer": self.is_customer,
-            },
-        )
-        if api_company is None:
+        api_company_data = {
+            "name": self.name,
+            "currency": self.currency,
+            "is_supplier": self.is_supplier,
+            "is_manufacturer": self.is_manufacturer,
+            "is_customer": self.is_customer,
+        }
+        if not (api_company := InvenTreeCompany.create(inventree_api, api_company_data)):
             raise InvenTreeObjectCreationError(InvenTreeCompany)
+
         return api_company

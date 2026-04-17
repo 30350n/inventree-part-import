@@ -237,8 +237,7 @@ class PartImporter:
             update_object_data(supplier_part, supplier_part_data, f"{supplier.name} part")
         else:
             action_str = "added"
-            supplier_part = SupplierPart.create(self.api, supplier_part_data)
-            if supplier_part is None:
+            if not (supplier_part := SupplierPart.create(self.api, supplier_part_data)):
                 raise InvenTreeObjectCreationError(SupplierPart)
 
         self.setup_price_breaks(supplier_part, api_part)
@@ -273,21 +272,19 @@ class PartImporter:
                 self.category_map[api_part.category_path[-1].lower()] = category
 
             info(f"creating part {api_part.MPN} in '{category.part_category.pathstring}' ...")
-            part = Part.create(self.api, {"category": category.part_category.pk, **part_data})
-            if part is None:
+
+            part_data["category"] = category.part_category.pk
+            if not (part := Part.create(self.api, part_data)):
                 raise InvenTreeObjectCreationError(Part)
 
         manufacturer = create_manufacturer(self.api, api_part.manufacturer)
         info(f"creating manufacturer part {api_part.MPN} ...")
-        manufacturer_part = ManufacturerPart.create(
-            self.api,
-            {
-                "part": part.pk,
-                "manufacturer": manufacturer.pk,
-                **api_part.get_manufacturer_part_data(),
-            },
-        )
-        if manufacturer_part is None:
+        manufacturer_part_data = {
+            "part": part.pk,
+            "manufacturer": manufacturer.pk,
+            **api_part.get_manufacturer_part_data(),
+        }
+        if not (manufacturer_part := ManufacturerPart.create(self.api, manufacturer_part_data)):
             raise InvenTreeObjectCreationError(ManufacturerPart)
 
         return manufacturer_part, part
@@ -330,27 +327,23 @@ class PartImporter:
             for price_break in SupplierPriceBreak.list(self.api, part=supplier_part.pk)
         }
 
-        updated_pricing = False
+        if api_part.price_breaks:
+            info("updating price breaks ...")
+
         for quantity, price in api_part.price_breaks.items():
             if price_break := price_breaks.get(quantity):
                 if price == float(price_break.price):
                     continue
                 price_break.save({"price": price, "price_currency": api_part.currency})
-                updated_pricing = True
             else:
-                SupplierPriceBreak.create(
-                    self.api,
-                    {
-                        "part": supplier_part.pk,
-                        "quantity": quantity,
-                        "price": price,
-                        "price_currency": api_part.currency,
-                    },
-                )
-                updated_pricing = True
-
-        if updated_pricing:
-            info("updating price breaks ...")
+                price_break_data = {
+                    "part": supplier_part.pk,
+                    "quantity": quantity,
+                    "price": price,
+                    "price_currency": api_part.currency,
+                }
+                if not SupplierPriceBreak.create(self.api, price_break_data):
+                    raise InvenTreeObjectCreationError(SupplierPriceBreak)
 
     def setup_parameters(self, part: Part, api_part: ApiPart, update_existing: bool = True):
         import_result = ImportResult.SUCCESS

@@ -54,16 +54,13 @@ def setup_categories_and_parameters(inventree_api: InvenTreeAPI):
         if part_category is None:
             info(f"creating category '{'/'.join(category_stub.path)}' ...")
             parent = part_categories.get(tuple(category_stub.path[:-1]))
-            part_category = PartCategory.create(
-                inventree_api,
-                {
-                    "name": category_stub.name,
-                    "description": category_stub.description,
-                    "structural": category_stub.structural,
-                    "parent": parent.pk if parent else None,
-                },
-            )
-            if part_category is None:
+            part_category_data = {
+                "name": category_stub.name,
+                "description": category_stub.description,
+                "structural": category_stub.structural,
+                "parent": parent.pk if parent else None,
+            }
+            if not (part_category := PartCategory.create(inventree_api, part_category_data)):
                 raise InvenTreeObjectCreationError(PartCategory)
 
             part_categories[tuple(category_stub.path)] = part_category
@@ -101,15 +98,12 @@ def setup_categories_and_parameters(inventree_api: InvenTreeAPI):
 
         if not (parameter_template := parameter_templates.get(parameter.name)):
             info(f"creating parameter template '{parameter.name}' ...")
-            parameter_template = ParameterTemplate.create(
-                inventree_api,
-                {
-                    "name": parameter.name,
-                    "description": description,
-                    "units": units,
-                },
-            )
-            if parameter_template is None:
+            template_data = {
+                "name": parameter.name,
+                "description": description,
+                "units": units,
+            }
+            if not (parameter_template := ParameterTemplate.create(inventree_api, template_data)):
                 raise InvenTreeObjectCreationError(ParameterTemplate)
             parameter_templates[parameter.name] = parameter_template
 
@@ -145,14 +139,11 @@ def setup_categories_and_parameters(inventree_api: InvenTreeAPI):
             category_str = "/".join(category.path)
             info(f"creating parameter template '{parameter}' for '{category_str}' ...")
             assert category.part_category
-            parameter_template = PartCategoryParameterTemplate.create(
-                inventree_api,
-                {
-                    "category": category.part_category.pk,
-                    "template": parameter_templates[parameter].pk,
-                },
-            )
-            if parameter_template is None:
+            parameter_template_data = {
+                "category": category.part_category.pk,
+                "template": parameter_templates[parameter].pk,
+            }
+            if not PartCategoryParameterTemplate.create(inventree_api, parameter_template_data):
                 raise InvenTreeObjectCreationError(PartCategoryParameterTemplate)
 
     for category, template_name in part_category_parameter_templates:
