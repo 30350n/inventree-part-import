@@ -57,9 +57,23 @@ class LCSC(Supplier):
                 exact_matches = exact_filtered if exact_filtered else exact_matches
 
             if len(exact_matches) == 1:
+                if detail_result := self.lcsc_api.product_detail(exact_matches[0]["productCode"]):
+                    return [self.get_api_part(detail_result)], 1
                 return [self.get_api_part(exact_matches[0])], 1
 
-            return list(map(self.get_api_part, filtered_matches)), len(filtered_matches)
+            details = map(
+                lambda filtered_match: self.lcsc_api.product_detail(filtered_match["productCode"]),
+                filtered_matches,
+            )
+            return list(
+                map(
+                    self.get_api_part,
+                    [
+                        detailed if detailed else filtered_match
+                        for detailed, filtered_match in zip(details, filtered_matches)
+                    ],
+                )
+            ), len(filtered_matches)
 
         return [], 0
 
