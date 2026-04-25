@@ -369,17 +369,26 @@ class DryInvenTreeAPI(InvenTreeAPI):
         self.base_url = "inventree/"
         self.api_version = 999999
         self._pks: dict[str, int] = {}
-        self._pathstings: dict[int, str] = {}
+        self._objects: dict[str, dict[int, dict[str, Any]]] = {}
         pass
 
     def get(self, url: str, **kwargs: Any) -> dict[str, Any]:
-        url_split = url.strip("/").split("/")
+        url_split = url.strip("/").rsplit("/", 1)
         if url_split[-1].isnumeric():
-            raise HTTPError({"status_code": 404, "body": "DRY_RUN"})
+            if data := self._objects.setdefault(url_split[0], {}).get(int(url_split[-1])):
+                return data
+            else:
+                raise HTTPError({"status_code": 404})
+
+        elif not kwargs.get("params"):
+            return {"results": list(self._objects.setdefault(url, {}).values())}
+
         return {"results": None}
 
     def patch(self, url: str, data: dict[str, Any], **kwargs: Any):
-        pass
+        url_split = url.strip("/").rsplit("/", 1)
+        if url_split[-1].isnumeric():
+            self._objects.setdefault(url_split[0], {})[int(url_split[-1])] |= data
 
     def post(self, url: str, data: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
         pk = self._pks.setdefault(url, 1)
@@ -391,11 +400,14 @@ class DryInvenTreeAPI(InvenTreeAPI):
             case "part/":
                 data_out["image"] = None
             case "part/category/":
-                parent_pathstring = self._pathstings.get(data.get("parent", -1))
-                pathstring = (f"{parent_pathstring}/" if parent_pathstring else "") + data["name"]
-                data_out["pathstring"] = self._pathstings[pk] = pathstring
+                if parent := self._objects.setdefault(url, {}).get(data.get("parent", -1)):
+                    data_out["pathstring"] = f"{parent['pathstring']}/{data['name']}"
+                else:
+                    data_out["pathstring"] = data["name"]
             case _:
                 pass
+
+        self._objects.setdefault(url, {})[pk] = data_out
 
         return data_out
 
