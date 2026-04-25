@@ -47,7 +47,7 @@ class ApiPart:
     def finalize_hook(self):
         return True
 
-    def get_part_data(self):
+    def get_part_data(self) -> dict[str, Any]:
         return {
             "name": self.MPN,
             "description": self.description[:250],
@@ -57,14 +57,14 @@ class ApiPart:
             "purchaseable": True,
         }
 
-    def get_manufacturer_part_data(self):
+    def get_manufacturer_part_data(self) -> dict[str, Any]:
         return {
             "MPN": self.MPN,
             "description": self.description[:250],
             "link": self.manufacturer_link[:200],
         }
 
-    def get_supplier_part_data(self):
+    def get_supplier_part_data(self) -> dict[str, Any]:
         data: dict[str, Any] = {
             "description": self.description[:250],
             "link": self.supplier_link[:200],
