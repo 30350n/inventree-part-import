@@ -1,4 +1,5 @@
 import re
+from types import MethodType
 from typing import Any
 
 from fake_useragent import UserAgent
@@ -97,12 +98,15 @@ class LCSC(Supplier):
         if category := lcsc_part.get("catalogName"):
             category_path.append(category)
 
+        finalize = False
         parameters = {}
         if lcsc_parameters := lcsc_part.get("paramVOList"):
             parameters = {
                 parameter.get("paramNameEn"): parameter.get("paramValueEn")
                 for parameter in lcsc_parameters
             }
+        else:
+            finalize = True
 
         if package := lcsc_part.get("encapStandard"):
             parameters["Package Type"] = package
@@ -114,7 +118,7 @@ class LCSC(Supplier):
         }
         currency = CURRENCY_MAP.get(price_list[0].get("currencySymbol")) or self.currency
 
-        return ApiPart(
+        api_part = ApiPart(
             description=REMOVE_HTML_TAGS.sub("", description),
             image_url=image_url,
             datasheet_url=datasheet_url,
@@ -130,6 +134,17 @@ class LCSC(Supplier):
             price_breaks=price_breaks,
             currency=currency,
         )
+
+        if finalize:
+            api_part.finalize_hook = MethodType(self.finalize_hook, api_part)
+
+        return api_part
+
+    def finalize_hook(self, api_part: ApiPart):
+        api_part.parameters |= {
+            parameter.get("paramNameEn"): parameter.get("paramValueEn")
+            for parameter in self.lcsc_api.product_detail(api_part.SKU)["paramVOList"]
+        }
 
 
 class LCSCApi:
