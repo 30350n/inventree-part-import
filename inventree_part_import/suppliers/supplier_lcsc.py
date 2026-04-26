@@ -107,23 +107,19 @@ class LCSC(Supplier):
         if package := lcsc_part.get("encapStandard"):
             parameters["Package Type"] = package
 
-        price_list = lcsc_part.get("productPriceList", [])
+        price_list = lcsc_part["productPriceList"]
         price_breaks = {
             price_break.get("ladder"): price_break.get("currencyPrice")
             for price_break in price_list
         }
-
-        if price_list:
-            currency = CURRENCY_MAP.get(price_list[0].get("currencySymbol")) or self.currency
-        else:
-            currency = self.currency
+        currency = CURRENCY_MAP.get(price_list[0].get("currencySymbol")) or self.currency
 
         return ApiPart(
             description=REMOVE_HTML_TAGS.sub("", description),
             image_url=image_url,
             datasheet_url=datasheet_url,
             supplier_link=supplier_link,
-            SKU=lcsc_part.get("productCode", ""),
+            SKU=lcsc_part["productCode"],
             manufacturer=REMOVE_HTML_TAGS.sub("", lcsc_part.get("brandNameEn", "")),
             manufacturer_link="",
             MPN=lcsc_part.get("productModel", ""),
