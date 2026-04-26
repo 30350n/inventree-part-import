@@ -129,12 +129,12 @@ class Mouser(ScrapeSupplier):
     def finalize_hook(self, api_part: ApiPart):
         if not self.use_scraping:
             hint("scraping is disabled: can't finalize parameters and category_path")
-            return True
+            return
 
         url = api_part.supplier_link
         if not (result := self.scrape(url)):
             warning(f"failed to finalize part specifications from '{url}' (blocked)")
-            return True
+            return
 
         soup = BeautifulSoup(result.content, "html.parser")
 
@@ -147,15 +147,11 @@ class Mouser(ScrapeSupplier):
             )
         else:
             warning(f"failed to get parameters from '{url}' (might be blocked)")
-            return True
 
         if breadcrumb := soup.find("ol", class_="breadcrumb"):
             api_part.category_path = [li.text.strip() for li in breadcrumb.find_all("li")[1:-1]]
         else:
             warning(f"failed to get category path from '{url}' (might be blocked)")
-            return True
-
-        return True
 
 
 class MouserPartSearchRequest(_MouserPartSearchRequest):

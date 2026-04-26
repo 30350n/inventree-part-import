@@ -7,7 +7,7 @@ from http.cookiejar import CookieJar
 from typing import Any, Callable, Literal, cast
 
 import browser_cookie3
-from error_helper import warning
+from error_helper import error, warning
 from fake_useragent import UserAgent
 from requests import Response, Session
 
@@ -37,15 +37,20 @@ class ApiPart:
         self._fix_urls()
 
     def finalize(self):
-        if not self.finalize_hook():
+        try:
+            self.finalize_hook()
+        except SupplierError as e:
+            error(e)
             return False
+
         self._fix_urls()
         for pre_creation_hook in get_pre_creation_hooks():
             pre_creation_hook(self)
+
         return True
 
     def finalize_hook(self):
-        return True
+        pass
 
     def get_part_data(self) -> dict[str, Any]:
         return {

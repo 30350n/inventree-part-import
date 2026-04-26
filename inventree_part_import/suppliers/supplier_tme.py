@@ -106,23 +106,17 @@ class TME(Supplier):
         return api_part
 
     def finalize_hook(self, api_part: ApiPart):
-        if not (parameters := self.tme_api.get_parameters(api_part.SKU)):
-            return False
-
-        for parameter in parameters:
+        for parameter in self.tme_api.get_parameters(api_part.SKU):
             name = parameter["ParameterName"]
             value = REMOVE_HTML_TAGS.sub("", parameter["ParameterValue"])
             if existing_value := api_part.parameters.get(name):
                 value = ", ".join((existing_value, value))
             api_part.parameters[name] = value
 
-        if product_files := self.tme_api.get_product_files(api_part.SKU):
-            for document in product_files.get("DocumentList", []):
-                if document.get("DocumentType") == "DTE":
-                    api_part.datasheet_url = fix_tme_url(document.get("DocumentUrl"))
-                    break
-
-        return True
+        for document in self.tme_api.get_product_files(api_part.SKU)["DocumentList"]:
+            if document.get("DocumentType") == "DTE":
+                api_part.datasheet_url = fix_tme_url(document.get("DocumentUrl"))
+                break
 
 
 def fix_tme_url(url: str):
