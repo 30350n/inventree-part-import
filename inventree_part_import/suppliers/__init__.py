@@ -41,10 +41,10 @@ def search(search_term: str, supplier_id: str | None = None, only_supplier: bool
             return None
 
     thread_pool = ThreadPool(processes=8)
-    return (
+    return [
         (api_company, thread_pool.apply_async(supplier_object.cached_search, (search_term,)))
         for supplier_object, api_company in suppliers
-    )
+    ]
 
 
 _supplier_companies: dict[str, InvenTreeCompany] | None = None
