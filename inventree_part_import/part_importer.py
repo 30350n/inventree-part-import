@@ -330,6 +330,10 @@ class PartImporter:
         if api_part.price_breaks:
             info("updating price breaks ...")
 
+        # delete price breaks the supplier no longer reports, so removed quantity tiers don't linger
+        for quantity in price_breaks.keys() - api_part.price_breaks.keys():
+            price_breaks[quantity].delete()
+
         for quantity, price in api_part.price_breaks.items():
             if price_break := price_breaks.get(quantity):
                 if price == float(price_break.price):
