@@ -18,7 +18,7 @@ from thefuzz import fuzz
 
 from .categories import Category, setup_categories_and_parameters
 from .config import CATEGORIES_CONFIG, CONFIG, get_config, get_pre_creation_hooks
-from .exceptions import InvenTreeObjectCreationError
+from .exceptions import InvenTreeObjectCreationError, SupplierError
 from .inventree_helpers import (
     create_manufacturer,
     get_manufacturer_part,
@@ -79,7 +79,12 @@ class PartImporter:
 
         for supplier, async_results in search_results:
             info(f"searching at {supplier.name} ...")
-            results, result_count = async_results.get()
+            try:
+                results, result_count = async_results.get()
+            except SupplierError as e:
+                warning(f"error searching at {supplier.name}: {e}")
+                import_result |= ImportResult.INCOMPLETE
+                continue
 
             if not results:
                 hint(f"no results at {supplier.name}")
