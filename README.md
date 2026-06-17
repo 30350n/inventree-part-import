@@ -36,10 +36,11 @@ When configuring suppliers, it's **highly recommended** to always enable the Dig
 ```console
 select the suppliers you want to setup: (SPACEBAR to toggle, ENTER to confirm)
 > [x] DigiKey
+  [ ] TME
+  [ ] Texas Instruments
   [ ] LCSC
   [ ] Mouser
   [ ] Reichelt
-  [ ] TME
 ```
 
 #### Default categories/parameters configuration
@@ -128,6 +129,18 @@ Register a [**Production App**](https://developer.digikey.com/documentation?atab
 #### Mouser
 
 Request a **Search API** key from the [Mouser API Hub](https://www.mouser.com/api-hub/).
+
+#### Texas Instruments
+
+Follow the instructions from the [TI API Documentation](https://api-portal.ti.com/store-api-keys).
+
+The scope needed is « TI store inventory and pricing API ».
+
+**Note:** the TI API is not able to provide categories thus it is **strongly recomanded** to list it
+after DigiKey or Mouser otherwise due to a quirk the TI supplier parts error during creation.
+
+Creating a TI supplier part if the part already exists such as if DigiKey or Mouser is listed
+before TI in `suppliers.yaml` works correctly.
 
 #### TME
 
