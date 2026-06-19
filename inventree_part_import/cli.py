@@ -58,6 +58,42 @@ def handle_errors(func: Callable[P, None]) -> Callable[P, None]:
     return wrapper
 
 
+def _resolve_mouser_ibn(ibn_code):
+    suppliers, _ = get_suppliers(reload=True, setup=False)
+    if (mouser := suppliers.get("mouser")) is None:
+        error("Mouser supplier is not configured, cannot use --ibn")
+        return None
+
+    results = mouser.search_by_ibn(ibn_code)
+    if not results:
+        error(f"no results for IBN '{ibn_code}'")
+        return None
+
+    if len(results) == 1:
+        manufacturer_part = results[0].get("ManufacturerPartNumber")
+        if not manufacturer_part:
+            error("invalid IBN result: missing ManufacturerPartnumber")
+            return None
+        return manufacturer_part
+
+    prompt(f"found {len(results)} IBN matches at Mouser, select which one to use")
+    choices = [
+        f"{item.get('MouserPartNumber', 'N/A')} | {item.get('MouserDescription', 'N/A')}"
+        for item in results
+    ]
+    choices.append("Cancel")
+    choice_index = select(choices, deselected_prefix="  ", selected_prefix="> ")
+    if choice_index == len(choices) - 1:
+        warning("IBN selection cancelled")
+        return None
+
+    selected = results[choice_index]
+    manufacturer_part = selected.get("ManufacturerPartnumber")
+    if not manufacturer_part:
+        error("invalid IBN result: missing ManufacturerPartnumber")
+        return None
+    return manufacturer_part
+
 _suppliers, _available_suppliers = get_suppliers(setup=False)
 SuppliersChoices = click.Choice(_suppliers.keys(), case_sensitive=False)
 AvailableSuppliersChoices = click.Choice(_available_suppliers.keys(), case_sensitive=False)
@@ -85,6 +121,7 @@ InteractiveChoices = click.Choice(("default", "false", "true", "twice"), case_se
     "-c", "--config-dir", type=click.Path(path_type=Path), help="Override path to config directory."
 )
 @click.option("-v", "--verbose", is_flag=True, help="Enable verbose output for debugging.")
+@click.option("--ibn", help="Search by Mouser IBN.")
 @click.option("--show-config-dir", is_flag=True, help="Show path to config directory and exit.")
 @click.option("--configure", type=AvailableSuppliersChoices, help="Configure supplier.")
 @click.option("--update", metavar="CATEGORY", help="Update all parts from InvenTree CATEGORY.")
@@ -104,6 +141,7 @@ def inventree_part_import(
     dry: bool = False,
     config_dir: Path | None = None,
     verbose: bool = False,
+    ibn: str | None = None,
     show_config_dir: bool = False,
     configure: str | None = None,
     update: str | None = None,
@@ -160,7 +198,7 @@ def inventree_part_import(
                 suppliers_config[configure] = new_config
         return
 
-    if not inputs and not (update or update_recursive):
+    if not inputs and not (update or update_recursive or ibn):
         click.echo(context.get_help())
         return
 
@@ -179,6 +217,10 @@ def inventree_part_import(
         supplier = only
         only_supplier = True
 
+    if ibn and (update or update_recursive or inputs):
+        error("--ibn cannot be used with --update, --update-recursive, or input arguments")
+        return
+
     if verbose:
         logging.basicConfig(level=logging.DEBUG)
     else:
@@ -191,7 +233,11 @@ def inventree_part_import(
         return
 
     parts: list[str | Part]
-    if category_path := update_recursive or update:
+    if ibn:
+        if not (manufacturer_part := _resolve_mouser_ibn(ibn)):
+            return
+        parts = [manufacturer_part]
+    elif category_path := update_recursive or update:
         if update_recursive and update:
             hint("--update is being overridden by --update-recursive")
 
