@@ -35,6 +35,9 @@ class ApiPart:
 
     def __post_init__(self):
         self._fix_urls()
+        # collapse runs of whitespace (incl. non-breaking spaces like \xa0) into a single
+        # regular space; InvenTree's HTML validator rejects descriptions containing them
+        self.description = NORMALIZE_WHITESPACE.sub(" ", self.description).strip()
 
     def finalize(self):
         try:
@@ -202,6 +205,8 @@ DOMAIN_REGEX = re.compile(r"(https?://)(?:[^./]*\.?)*/")
 DOMAIN_SUB = "\\g<1>{}/"
 
 REMOVE_HTML_TAGS = re.compile(r"<.*?>|&([a-z0-9]+|#[0-9]{1,6}|#x[0-9a-f]{1,6});")
+
+NORMALIZE_WHITESPACE = re.compile(r"\s+")
 
 
 def money2float(money: str):
