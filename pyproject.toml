@@ -15,6 +15,7 @@ classifiers = [
 ]
 license = "MIT"
 authors = [{ name = "Bobbe", email = "mail@30350n.de" }]
+
 dependencies = [
     "beautifulsoup4",
     "browser-cookie3",
@@ -33,6 +34,9 @@ dependencies = [
     "tablib[ods, xls, xlsx]",
     "thefuzz",
 ]
+
+[project.scripts]
+inventree-part-import = "inventree_part_import.cli:inventree_part_import"
 
 [project.urls]
 Homepage = "https://github.com/30350n/inventree_part_import"
