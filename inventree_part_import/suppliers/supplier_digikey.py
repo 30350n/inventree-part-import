@@ -52,7 +52,9 @@ class DigiKey(Supplier):
         if not (result := self.digikey_api.keyword_search(search_term, limit=self.limit)):
             return [], 0
 
-        if exact_matches := result["ExactMatches"]:
+        # the v4 keyword search omits "ProductsCount" (and "FilterOptions") when nothing matches,
+        # returning only {"Products": [], "ExactMatches": [], "SearchLocaleUsed": {...}}
+        if exact_matches := result.get("ExactMatches"):
             if len(exact_matches) == 1:
                 return [self.get_api_part(exact_matches[0])], 1
             else:
@@ -60,10 +62,10 @@ class DigiKey(Supplier):
 
         products = [
             product
-            for product in result["Products"]
+            for product in result.get("Products", [])
             if product["ManufacturerProductNumber"].lower().startswith(search_term.lower())
         ]
-        return list(map(self.get_api_part, products)), result["ProductsCount"]
+        return list(map(self.get_api_part, products)), result.get("ProductsCount", len(products))
 
     def get_api_part(self, product_details: dict[str, Any], digikey_part_number: str | None = None):
         if digikey_part_number:
